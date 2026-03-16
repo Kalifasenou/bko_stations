@@ -1,6 +1,7 @@
 from django.test import TestCase, Client
 from django.utils import timezone
 from datetime import timedelta
+from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase, APIClient
 from rest_framework import status
 
@@ -136,6 +137,8 @@ class StationAPITests(APITestCase):
     
     def setUp(self):
         self.client = APIClient()
+        User = get_user_model()
+        self.user = User.objects.create_user(username='apiuser', password='StrongPass123!')
         self.station1 = Station.objects.create(
             name="Station 1",
             brand="Shell",
@@ -177,12 +180,50 @@ class StationAPITests(APITestCase):
         response = self.client.get('/api/search/?q=S')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_create_station_with_manager_name(self):
+        """Test la création d'une station avec nom du gérant"""
+        data = {
+            'name': 'Nouvelle Station',
+            'brand': 'Oryx',
+            'address': 'Sotuba',
+            'latitude': 12.6700,
+            'longitude': -7.9800,
+            'manager_name': 'Amadou Diallo',
+            'is_active': True,
+        }
+        response = self.client.post('/api/stations/', data)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_create_station_with_manager_name_authenticated(self):
+        """Test la création d'une station avec authentification JWT"""
+        token_response = self.client.post('/api/auth/token/', {
+            'username': 'apiuser',
+            'password': 'StrongPass123!'
+        }, format='json')
+        access = token_response.data['access']
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {access}')
+
+        data = {
+            'name': 'Nouvelle Station Auth',
+            'brand': 'Oryx',
+            'address': 'Sotuba',
+            'latitude': 12.6700,
+            'longitude': -7.9800,
+            'manager_name': 'Amadou Diallo',
+            'is_active': True,
+        }
+        response = self.client.post('/api/stations/', data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['manager_name'], 'Amadou Diallo')
+
 
 class SignalementAPITests(APITestCase):
     """Tests pour l'API des signalements"""
     
     def setUp(self):
         self.client = APIClient()
+        User = get_user_model()
+        self.user = User.objects.create_user(username='signaluser', password='StrongPass123!')
         self.station = Station.objects.create(
             name="Station Test",
             brand="Shell",
@@ -198,16 +239,33 @@ class SignalementAPITests(APITestCase):
             'status': 'Disponible'
         }
         response = self.client.post('/api/signalements/', data)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_create_signalement_authenticated(self):
+        """Test la création d'un signalement avec JWT"""
+        token_response = self.client.post('/api/auth/token/', {
+            'username': 'signaluser',
+            'password': 'StrongPass123!'
+        }, format='json')
+        access = token_response.data['access']
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {access}')
+
+        data = {
+            'station': self.station.id,
+            'fuel_type': 'Essence',
+            'status': 'Disponible'
+        }
+        response = self.client.post('/api/signalements/', data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
     
     def test_create_signalement_missing_station(self):
-        """Test que la création échoue sans station"""
+        """Test que la création échoue sans station (requiert auth)"""
         data = {
             'fuel_type': 'Essence',
             'status': 'Disponible'
         }
         response = self.client.post('/api/signalements/', data)
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
     
     def test_latest_signalements(self):
         """Test la récupération des derniers signalements"""
@@ -264,3 +322,44 @@ class StatisticsAPITests(APITestCase):
         """Test l'endpoint de la heatmap"""
         response = self.client.get('/api/signalements/heatmap/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+
+class AuthAndMonitoringAPITests(APITestCase):
+    """Tests JWT et endpoint monitoring"""
+
+    def setUp(self):
+        self.client = APIClient()
+        User = get_user_model()
+        self.user = User.objects.create_user(username='monitoruser', password='StrongPass123!')
+
+    def test_token_obtain_and_refresh(self):
+        response = self.client.post('/api/auth/token/', {
+            'username': 'monitoruser',
+            'password': 'StrongPass123!'
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('access', response.data)
+        self.assertIn('refresh', response.data)
+
+        refresh_response = self.client.post('/api/auth/token/refresh/', {
+            'refresh': response.data['refresh']
+        }, format='json')
+        self.assertEqual(refresh_response.status_code, status.HTTP_200_OK)
+        self.assertIn('access', refresh_response.data)
+
+    def test_monitoring_requires_authentication(self):
+        response = self.client.get('/api/monitoring/')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_monitoring_with_authentication(self):
+        token_response = self.client.post('/api/auth/token/', {
+            'username': 'monitoruser',
+            'password': 'StrongPass123!'
+        }, format='json')
+        access = token_response.data['access']
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {access}')
+
+        response = self.client.get('/api/monitoring/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('status', response.data)
+        self.assertIn('database', response.data)

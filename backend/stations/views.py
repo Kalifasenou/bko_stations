@@ -1,7 +1,7 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticatedOrReadOnly, IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 from django.utils import timezone
 from django.views.decorators.cache import cache_page
@@ -15,6 +15,7 @@ import logging
 
 from .models import Station, Signalement
 from .serializers import StationSerializer, SignalementSerializer
+from .utils import get_user_ip, validate_coordinates as utils_validate_coordinates
 
 logger = logging.getLogger(__name__)
 
@@ -24,20 +25,6 @@ class StandardResultsSetPagination(PageNumberPagination):
     page_size = 20
     page_size_query_param = 'page_size'
     max_page_size = 100
-
-
-def validate_coordinates(lat, lon):
-    """Valide les coordonnées GPS"""
-    try:
-        lat = float(lat)
-        lon = float(lon)
-        if not (-90 <= lat <= 90):
-            raise ValidationError("La latitude doit être entre -90 et 90")
-        if not (-180 <= lon <= 180):
-            raise ValidationError("La longitude doit être entre -180 et 180")
-        return lat, lon
-    except (TypeError, ValueError):
-        raise ValidationError("Les coordonnées doivent être des nombres valides")
 
 
 def calculate_distance(lat1, lon1, lat2, lon2):
@@ -57,13 +44,18 @@ def calculate_distance(lat1, lon1, lat2, lon2):
 
 class StationViewSet(viewsets.ModelViewSet):
     """ViewSet pour les stations de carburant"""
-    queryset = Station.objects.all()
+    queryset = Station.objects.filter(is_active=True)
     serializer_class = StationSerializer
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticatedOrReadOnly]
     pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
-        queryset = super().get_queryset()
+        queryset = Station.objects.filter(is_active=True)
+        
+        # Filtrer par brand si fourni
+        brand = self.request.query_params.get('brand')
+        if brand:
+            queryset = queryset.filter(brand__icontains=brand)
         
         # Filtrer par latitude/longitude si fourni
         lat = self.request.query_params.get('lat')
@@ -71,7 +63,7 @@ class StationViewSet(viewsets.ModelViewSet):
         
         if lat and lon:
             try:
-                lat, lon = validate_coordinates(lat, lon)
+                lat, lon = utils_validate_coordinates(lat, lon)
                 radius = float(self.request.query_params.get('radius', 10))
                 if radius <= 0:
                     raise ValidationError("Le rayon doit être positif")
@@ -117,7 +109,7 @@ class StationViewSet(viewsets.ModelViewSet):
                 )
             
             nearby_stations = []
-            for s in Station.objects.exclude(pk=station.pk):
+            for s in Station.objects.filter(is_active=True).exclude(pk=station.pk):
                 distance = calculate_distance(lat, lon, s.latitude, s.longitude)
                 if distance <= radius:
                     s.distance = round(distance, 1)
@@ -138,11 +130,11 @@ class SignalementViewSet(viewsets.ModelViewSet):
     """ViewSet pour les signalements de carburant"""
     queryset = Signalement.objects.all()
     serializer_class = SignalementSerializer
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticatedOrReadOnly]
 
     def create(self, request, *args, **kwargs):
         """Créer un nouveau signalement avec validation IP et incrémentation"""
-        ip = request.META.get('REMOTE_ADDR')
+        ip = get_user_ip(request)
         station_id = request.data.get('station')
         fuel_type = request.data.get('fuel_type')
         new_status = request.data.get('status')
@@ -210,7 +202,7 @@ class SignalementViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
         """Approuver un signalement existant"""
-        ip = request.META.get('REMOTE_ADDR')
+        ip = get_user_ip(request)
         signalement = self.get_object()
         
         # Vérifier si l'utilisateur a déjà approuvé dans l'heure
@@ -270,67 +262,73 @@ def statistics(request):
         twenty_four_hours_ago = now - timedelta(hours=24)
         
         # Total stations
-        total_stations = Station.objects.count()
+        total_stations = Station.objects.filter(is_active=True).count()
+        
+        # Signalements actifs (non expirés)
+        active_signalements = Signalement.objects.filter(timestamp__gte=four_hours_ago)
+        
+        # Stations avec carburant disponible (au moins un carburant disponible)
+        stations_with_fuel = Station.objects.filter(
+            is_active=True,
+            signalements__timestamp__gte=four_hours_ago,
+            signalements__status='Disponible'
+        ).distinct().count()
+        
+        # Stations en rupture (tous les signalements récents sont 'Épuisé')
+        # On exclut les stations qui ont au moins un signalement 'Disponible'
+        stations_empty = Station.objects.filter(
+            is_active=True,
+            signalements__timestamp__gte=four_hours_ago,
+            signalements__status='Épuisé'
+        ).exclude(
+            signalements__timestamp__gte=four_hours_ago,
+            signalements__status='Disponible'
+        ).distinct().count()
+        
+        # Signalements des dernières 24h
+        signalements_24h = Signalement.objects.filter(timestamp__gte=twenty_four_hours_ago).count()
+        
+        # Signalements par type de carburant
+        essence_disponible = Signalement.objects.filter(
+            timestamp__gte=four_hours_ago,
+            fuel_type='Essence',
+            status='Disponible'
+        ).count()
+        
+        gazole_disponible = Signalement.objects.filter(
+            timestamp__gte=four_hours_ago,
+            fuel_type='Gazole',
+            status='Disponible'
+        ).count()
+        
+        # Top stations avec le plus de signalements
+        top_stations = Station.objects.filter(is_active=True).annotate(
+            signalement_count=Count('signalements', filter=Q(signalements__timestamp__gte=twenty_four_hours_ago))
+        ).filter(signalement_count__gt=0).order_by('-signalement_count')[:5]
+        
+        return Response({
+            'total_stations': total_stations,
+            'stations_with_fuel': stations_with_fuel,
+            'stations_empty': stations_empty,
+            'stations_unknown': max(0, total_stations - stations_with_fuel - stations_empty),
+            'signalements_24h': signalements_24h,
+            'active_signalements': active_signalements.count(),
+            'fuel_availability': {
+                'essence_disponible': essence_disponible,
+                'gazole_disponible': gazole_disponible,
+            },
+            'top_stations': [
+                {'id': s.id, 'name': s.name, 'brand': s.brand, 'count': s.signalement_count}
+                for s in top_stations
+            ],
+            'last_updated': now.isoformat(),
+        })
     except Exception as e:
         logger.error(f"Erreur dans statistics: {e}")
         return Response(
             {"error": "Erreur lors du calcul des statistiques"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
-    
-    # Signalements actifs (non expirés)
-    active_signalements = Signalement.objects.filter(timestamp__gte=four_hours_ago)
-    
-    # Stations avec carburant disponible
-    stations_with_fuel = Station.objects.filter(
-        signalements__timestamp__gte=four_hours_ago,
-        signalements__status='Disponible'
-    ).distinct().count()
-    
-    # Stations en rupture
-    stations_empty = Station.objects.filter(
-        signalements__timestamp__gte=four_hours_ago,
-        signalements__status='Épuisé'
-    ).distinct().count()
-    
-    # Signalements des dernières 24h
-    signalements_24h = Signalement.objects.filter(timestamp__gte=twenty_four_hours_ago).count()
-    
-    # Signalements par type de carburant
-    essence_disponible = Signalement.objects.filter(
-        timestamp__gte=four_hours_ago,
-        fuel_type='Essence',
-        status='Disponible'
-    ).count()
-    
-    gazole_disponible = Signalement.objects.filter(
-        timestamp__gte=four_hours_ago,
-        fuel_type='Gazole',
-        status='Disponible'
-    ).count()
-    
-    # Top stations avec le plus de signalements
-    top_stations = Station.objects.annotate(
-        signalement_count=Count('signalements', filter=Q(signalements__timestamp__gte=twenty_four_hours_ago))
-    ).filter(signalement_count__gt=0).order_by('-signalement_count')[:5]
-    
-    return Response({
-        'total_stations': total_stations,
-        'stations_with_fuel': stations_with_fuel,
-        'stations_empty': stations_empty,
-        'stations_unknown': total_stations - stations_with_fuel - stations_empty,
-        'signalements_24h': signalements_24h,
-        'active_signalements': active_signalements.count(),
-        'fuel_availability': {
-            'essence_disponible': essence_disponible,
-            'gazole_disponible': gazole_disponible,
-        },
-        'top_stations': [
-            {'id': s.id, 'name': s.name, 'brand': s.brand, 'count': s.signalement_count}
-            for s in top_stations
-        ],
-        'last_updated': now.isoformat(),
-    })
 
 
 @api_view(['GET'])
@@ -354,7 +352,8 @@ def search_stations(request):
             )
         
         stations = Station.objects.filter(
-            Q(name__icontains=query) | Q(brand__icontains=query)
+            Q(name__icontains=query) | Q(brand__icontains=query),
+            is_active=True
         ).order_by('name')[:20]
         
         serializer = StationSerializer(stations, many=True)
@@ -376,7 +375,7 @@ def stations_by_status(request):
         status_filter = request.query_params.get('status', 'all')
         four_hours_ago = timezone.now() - timedelta(hours=4)
         
-        stations = Station.objects.all()
+        stations = Station.objects.filter(is_active=True)
         
         if status_filter == 'available':
             # Stations avec au moins un carburant disponible
@@ -417,12 +416,12 @@ def statistics_by_brand(request):
     try:
         four_hours_ago = timezone.now() - timedelta(hours=4)
         
-        brands = Station.objects.values('brand').distinct()
+        brands = Station.objects.filter(is_active=True).values('brand').distinct()
         stats = []
         
         for brand_obj in brands:
             brand = brand_obj['brand']
-            brand_stations = Station.objects.filter(brand=brand)
+            brand_stations = Station.objects.filter(is_active=True, brand=brand)
             
             available = brand_stations.filter(
                 signalements__timestamp__gte=four_hours_ago,
@@ -432,6 +431,9 @@ def statistics_by_brand(request):
             empty = brand_stations.filter(
                 signalements__timestamp__gte=four_hours_ago,
                 signalements__status='Épuisé'
+            ).exclude(
+                signalements__timestamp__gte=four_hours_ago,
+                signalements__status='Disponible'
             ).distinct().count()
             
             stats.append({
@@ -459,7 +461,7 @@ def fuel_availability_map(request):
     try:
         four_hours_ago = timezone.now() - timedelta(hours=4)
         
-        stations = Station.objects.prefetch_related(
+        stations = Station.objects.filter(is_active=True).prefetch_related(
             Prefetch('signalements',
                      queryset=Signalement.objects.filter(timestamp__gte=four_hours_ago))
         )
@@ -522,5 +524,82 @@ def signalements_heatmap(request):
         logger.error(f"Erreur dans signalements_heatmap: {e}")
         return Response(
             {"error": "Erreur lors de la génération de la heatmap"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+@cache_page(30)
+def health_check(request):
+    """Endpoint de vérification de santé de l'API"""
+    try:
+        # Check database connection
+        from django.db import connection
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+        
+        # Get some basic stats
+        total_stations = Station.objects.filter(is_active=True).count()
+        recent_signalements = Signalement.objects.filter(
+            timestamp__gte=timezone.now() - timedelta(hours=4)
+        ).count()
+        
+        return Response({
+            'status': 'healthy',
+            'database': 'connected',
+            'total_stations': total_stations,
+            'recent_signalements': recent_signalements,
+            'timestamp': timezone.now().isoformat(),
+        })
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return Response(
+            {'status': 'unhealthy', 'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def monitoring_overview(request):
+    """Endpoint de monitoring opérationnel (authentification requise)"""
+    try:
+        from django.db import connection
+        from django.core.cache import cache
+
+        db_status = 'connected'
+        cache_status = 'ok'
+
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+        except Exception:
+            db_status = 'error'
+
+        try:
+            cache.set('monitoring_probe', 'ok', timeout=5)
+            cache.get('monitoring_probe')
+        except Exception:
+            cache_status = 'error'
+
+        total_stations = Station.objects.filter(is_active=True).count()
+        active_signalements = Signalement.objects.filter(
+            timestamp__gte=timezone.now() - timedelta(hours=4)
+        ).count()
+
+        return Response({
+            'status': 'ok' if db_status == 'connected' and cache_status == 'ok' else 'degraded',
+            'database': db_status,
+            'cache': cache_status,
+            'total_stations': total_stations,
+            'active_signalements_4h': active_signalements,
+            'log_level': logger.getEffectiveLevel(),
+            'timestamp': timezone.now().isoformat(),
+        })
+    except Exception as e:
+        logger.error(f"Monitoring overview failed: {e}")
+        return Response(
+            {'status': 'error', 'error': str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )

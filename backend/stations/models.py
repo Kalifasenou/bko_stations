@@ -14,6 +14,12 @@ class Station(models.Model):
         default='',
         verbose_name="Adresse"
     )
+    manager_name = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        verbose_name="Nom du gérant"
+    )
     latitude = models.FloatField(
         verbose_name="Latitude",
         validators=[MinValueValidator(-90), MaxValueValidator(90)]

@@ -13,10 +13,10 @@ class SignalementSerializer(serializers.ModelSerializer):
         model = Signalement
         fields = [
             'id', 'station', 'station_name', 'station_brand',
-            'fuel_type', 'status', 'timestamp', 'approval_count', 
-            'ip', 'time_ago', 'is_expired'
+            'fuel_type', 'status', 'timestamp', 'approval_count',
+            'time_ago', 'is_expired', 'comment'
         ]
-        read_only_fields = ['id', 'timestamp', 'approval_count', 'ip']
+        read_only_fields = ['id', 'timestamp', 'approval_count']
 
     def get_time_ago(self, obj):
         """Retourne le temps écoulé depuis le signalement"""
@@ -47,15 +47,18 @@ class StationSerializer(serializers.ModelSerializer):
     gazole_signalement = serializers.SerializerMethodField()
     status_color = serializers.CharField(read_only=True)
     distance = serializers.SerializerMethodField(required=False)
+    has_recent_signalement = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = Station
         fields = [
-            'id', 'name', 'brand', 'latitude', 'longitude',
+            'id', 'name', 'brand', 'address', 'manager_name', 'phone',
+            'latitude', 'longitude', 'is_active',
             'created_at', 'updated_at', 'latest_signalement',
             'essence_signalement', 'gazole_signalement',
-            'status_color', 'distance'
+            'status_color', 'distance', 'has_recent_signalement'
         ]
+        read_only_fields = ['created_at', 'updated_at', 'status_color', 'has_recent_signalement']
 
     def get_latest_signalement(self, obj):
         """Retourne le dernier signalement non expiré"""
@@ -65,12 +68,14 @@ class StationSerializer(serializers.ModelSerializer):
         return None
 
     def get_essence_signalement(self, obj):
+        """Retourne le dernier signalement non expiré pour l'essence"""
         latest = obj.get_latest_signalement_for_fuel('Essence')
         if latest:
             return SignalementSerializer(latest).data
         return None
 
     def get_gazole_signalement(self, obj):
+        """Retourne le dernier signalement non expiré pour le gazole"""
         latest = obj.get_latest_signalement_for_fuel('Gazole')
         if latest:
             return SignalementSerializer(latest).data

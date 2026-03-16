@@ -1,5 +1,5 @@
 /**
- * BAMAKO GAZ TRACKER - Main Application
+ * BAMAKA GAZ TRACKER - Main Application
  * PWA with offline support, real-time updates, and crowd-sourced fuel availability
  */
 
@@ -7,7 +7,7 @@
 // CONFIGURATION
 // ============================================
 const CONFIG = {
-    API_BASE_URL: 'http://localhost:8000/api',
+    API_BASE_URL: window.APP_CONFIG?.API_BASE_URL || 'http://localhost:8000/api',
     MAP_CENTER: [12.6392, -8.0029], // Bamako center
     MAP_ZOOM: 13,
     REFRESH_INTERVAL: 30000, // 30 seconds
@@ -25,6 +25,11 @@ const state = {
     userLocation: null,
     currentView: 'map',
     lastUpdate: null,
+    pagination: {
+        page: 1,
+        hasMore: true,
+        loading: false,
+    },
 };
 
 // ============================================
@@ -124,6 +129,10 @@ function initMap() {
 // STATIONS MANAGEMENT
 // ============================================
 async function loadStations() {
+    if (state.pagination.loading) return;
+    
+    state.pagination.loading = true;
+    
     try {
         const url = new URL(`${CONFIG.API_BASE_URL}/stations/`);
         
@@ -134,15 +143,33 @@ async function loadStations() {
             url.searchParams.append('radius', 10);
         }
         
+        // Add pagination params
+        url.searchParams.append('page', state.pagination.page);
+        url.searchParams.append('page_size', 50);
+        
         const response = await fetch(url);
         if (!response.ok) throw new Error('Failed to load stations');
         
-        state.stations = await response.json();
+        const data = await response.json();
+        
+        // Handle paginated response
+        const newStations = data.results || data;
+        
+        // Check if there are more pages
+        state.pagination.hasMore = !!(data.next);
+        
+        // Add new stations (avoid duplicates)
+        const existingIds = new Set(state.stations.map(s => s.id));
+        const uniqueStations = newStations.filter(s => !existingIds.has(s.id));
+        state.stations = [...state.stations, ...uniqueStations];
+        
         renderStations();
         
     } catch (error) {
         console.error('Error loading stations:', error);
         showToast('Erreur de chargement des stations', 'error');
+    } finally {
+        state.pagination.loading = false;
     }
 }
 
@@ -190,23 +217,23 @@ function createStationMarker(station) {
 }
 
 function getStationColor(station) {
-    const latest = station.latest_signalement;
-    if (!latest) return 'gray';
-    if (latest.status === 'Disponible') return 'green';
-    return 'red';
+    // Use the status_color from backend which properly handles both fuel types
+    return station.status_color || 'gray';
 }
 
 function getStationStatus(station) {
-    const latest = station.latest_signalement;
-    if (!latest) return 'unknown';
-    if (latest.status === 'Disponible') return 'available';
-    return 'empty';
+    const color = getStationColor(station);
+    if (color === 'green') return 'available';
+    if (color === 'red') return 'empty';
+    if (color === 'yellow') return 'partial';
+    return 'unknown';
 }
 
 function getColorHex(color) {
     const colors = {
         green: '#00FF41',
         red: '#FF3131',
+        yellow: '#FFD700',
         gray: '#6B7280',
     };
     return colors[color] || colors.gray;
@@ -253,7 +280,7 @@ function selectStation(station) {
         elements.distanceRow.style.display = 'none';
     }
     
-    // Update fuel cards
+    // Update fuel cards with BOTH fuel types
     updateFuelCards(station);
     
     // Show sheet
@@ -264,14 +291,17 @@ function selectStation(station) {
 }
 
 function getStatusText(station) {
-    const latest = station.latest_signalement;
-    if (!latest) return 'Inconnu';
-    if (latest.status === 'Disponible') return 'Carburant disponible';
-    return 'Rupture de stock';
+    const color = getStationColor(station);
+    if (color === 'green') return 'Carburant disponible';
+    if (color === 'red') return 'Rupture de stock';
+    if (color === 'yellow') return 'Stock partiel';
+    return 'Inconnu';
 }
 
 function updateFuelCards(station) {
-    const latest = station.latest_signalement;
+    // Get specific fuel data from backend
+    const essenceData = station.essence_signalement;
+    const gazoleData = station.gazole_signalement;
     
     // Reset cards
     elements.essenceCard.className = 'fuel-card';
@@ -279,17 +309,16 @@ function updateFuelCards(station) {
     elements.essenceStatus.textContent = 'Non signalé';
     elements.gazoleStatus.textContent = 'Non signalé';
     
-    if (latest) {
-        const isEssence = latest.fuel_type === 'Essence';
-        const isAvailable = latest.status === 'Disponible';
-        
-        if (isEssence) {
-            elements.essenceCard.className = `fuel-card ${isAvailable ? 'available' : 'empty'}`;
-            elements.essenceStatus.textContent = isAvailable ? 'Disponible' : 'Épuisé';
-        } else {
-            elements.gazoleCard.className = `fuel-card ${isAvailable ? 'available' : 'empty'}`;
-            elements.gazoleStatus.textContent = isAvailable ? 'Disponible' : 'Épuisé';
-        }
+    // Update essence card
+    if (essenceData) {
+        elements.essenceCard.className = `fuel-card ${essenceData.status === 'Disponible' ? 'available' : 'empty'}`;
+        elements.essenceStatus.textContent = `${essenceData.status} (${essenceData.time_ago})`;
+    }
+    
+    // Update gazole card
+    if (gazoleData) {
+        elements.gazoleCard.className = `fuel-card ${gazoleData.status === 'Disponible' ? 'available' : 'empty'}`;
+        elements.gazoleStatus.textContent = `${gazoleData.status} (${gazoleData.time_ago})`;
     }
 }
 
@@ -321,6 +350,8 @@ function getUserLocation() {
             state.map.setView([state.userLocation.lat, state.userLocation.lng], 14);
             
             // Reload stations with location
+            state.pagination.page = 1;
+            state.stations = [];
             loadStations();
         },
         (error) => {
@@ -374,9 +405,11 @@ async function reportAvailability(fuelType, status) {
         showToast('Signalement enregistré ! Merci 🙏', 'success');
         
         // Refresh stations
+        state.pagination.page = 1;
+        state.stations = [];
         await loadStations();
         
-        // Update selected station
+        // Update selected station with fresh data
         const updatedStation = state.stations.find(s => s.id === state.selectedStation.id);
         if (updatedStation) {
             selectStation(updatedStation);
@@ -431,17 +464,13 @@ async function updatePulse() {
 // EVENT LISTENERS
 // ============================================
 function setupEventListeners() {
-    // Action buttons
+    // Action buttons - now with fuel type selection
     elements.btnAvailable.addEventListener('click', () => {
-        // Report both fuel types as available
-        reportAvailability('Essence', 'Disponible');
-        setTimeout(() => reportAvailability('Gazole', 'Disponible'), 500);
+        showFuelTypeSelector('Disponible');
     });
     
     elements.btnEmpty.addEventListener('click', () => {
-        // Report both fuel types as empty
-        reportAvailability('Essence', 'Épuisé');
-        setTimeout(() => reportAvailability('Gazole', 'Épuisé'), 500);
+        showFuelTypeSelector('Épuisé');
     });
     
     // Navigation
@@ -457,7 +486,7 @@ function setupEventListeners() {
     });
     
     // Close sheet on handle click
-    document.querySelector('.sheet-handle').addEventListener('click', closeStationSheet);
+    document.querySelector('.sheet-handle')?.addEventListener('click', closeStationSheet);
     
     // Map click to close sheet
     state.map.on('click', closeStationSheet);
@@ -466,11 +495,68 @@ function setupEventListeners() {
     elements.installBtn.addEventListener('click', installPWA);
 }
 
+// ============================================
+// FUEL TYPE SELECTOR
+// ============================================
+function showFuelTypeSelector(status) {
+    // Create modal if not exists
+    let modal = document.getElementById('fuel-type-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'fuel-type-modal';
+        modal.className = 'modal-overlay';
+        modal.innerHTML = `
+            <div class="modal-content">
+                <h3>Quel carburant signaler ?</h3>
+                <div class="fuel-type-options">
+                    <button class="fuel-type-btn" data-fuel="Essence">
+                        ⛽ Essence
+                    </button>
+                    <button class="fuel-type-btn" data-fuel="Gazole">
+                        🚛 Gazole
+                    </button>
+                    <button class="fuel-type-btn" data-fuel="both">
+                        ⛽ + 🚛 Les deux
+                    </button>
+                </div>
+                <button class="modal-close">Annuler</button>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        
+        // Add event listeners
+        modal.querySelectorAll('.fuel-type-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const fuelType = btn.dataset.fuel;
+                modal.remove();
+                submitSignalement(fuelType, status);
+            });
+        });
+        
+        modal.querySelector('.modal-close').addEventListener('click', () => {
+            modal.remove();
+        });
+    }
+    
+    modal.style.display = 'flex';
+}
+
+async function submitSignalement(fuelType, status) {
+    if (fuelType === 'both') {
+        // Report both fuel types
+        await reportAvailability('Essence', status);
+        setTimeout(() => reportAvailability('Gazole', status), 500);
+    } else {
+        reportAvailability(fuelType, status);
+    }
+}
+
 function switchView(view) {
     state.currentView = view;
     
     // Hide all views
     document.getElementById('map').style.display = 'none';
+    document.querySelectorAll('.view-container').forEach(el => el.style.display = 'none');
     
     // Show selected view
     switch (view) {
@@ -484,6 +570,9 @@ function switchView(view) {
         case 'alerts':
             showAlertsView();
             break;
+        case 'add-station':
+            showAddStationView();
+            break;
     }
 }
 
@@ -493,11 +582,41 @@ function showListView() {
     if (!listView) {
         listView = document.createElement('div');
         listView.id = 'list-view';
+        listView.className = 'view-container';
+        listView.innerHTML = `
+            <div class="view-header">
+                <h2>Liste des stations</h2>
+                <input type="text" id="search-input" placeholder="Rechercher une station..." class="search-input">
+            </div>
+            <div class="station-list" id="station-list-container"></div>
+        `;
         document.body.appendChild(listView);
+        
+        // Add search listener
+        listView.querySelector('#search-input').addEventListener('input', (e) => {
+            filterStationList(e.target.value);
+        });
     }
     
     // Render list
-    listView.innerHTML = state.stations.map(station => `
+    renderStationList();
+    
+    // Show list
+    listView.style.display = 'block';
+}
+
+function renderStationList(filteredStations = null) {
+    const container = document.getElementById('station-list-container');
+    if (!container) return;
+    
+    const stationsToRender = filteredStations || state.stations;
+    
+    if (stationsToRender.length === 0) {
+        container.innerHTML = '<div class="empty-state">Aucune station trouvée</div>';
+        return;
+    }
+    
+    container.innerHTML = stationsToRender.map(station => `
         <div class="station-list-item" onclick="selectStationById(${station.id})">
             <div class="station-list-header">
                 <span class="station-list-name">${station.name}</span>
@@ -505,14 +624,24 @@ function showListView() {
             </div>
             <div class="station-list-meta">
                 <span>${station.brand}</span>
-                ${station.distance ? `<span>${station.distance} km</span>` : ''}
+                ${station.distance ? `<span class="distance-badge">${station.distance} km</span>` : ''}
+                ${station.has_recent_signalement ? '<span class="fresh-badge">Récent</span>' : ''}
             </div>
         </div>
     `).join('');
+}
+
+function filterStationList(query) {
+    if (!query.trim()) {
+        renderStationList();
+        return;
+    }
     
-    // Show list
-    document.querySelectorAll('#list-view, #alerts-view').forEach(el => el?.classList.remove('active'));
-    listView.classList.add('active');
+    const filtered = state.stations.filter(station => 
+        station.name.toLowerCase().includes(query.toLowerCase()) ||
+        station.brand.toLowerCase().includes(query.toLowerCase())
+    );
+    renderStationList(filtered);
 }
 
 function showAlertsView() {
@@ -521,6 +650,13 @@ function showAlertsView() {
     if (!alertsView) {
         alertsView = document.createElement('div');
         alertsView.id = 'alerts-view';
+        alertsView.className = 'view-container';
+        alertsView.innerHTML = `
+            <div class="view-header">
+                <h2>Derniers signalements</h2>
+            </div>
+            <div class="alerts-list" id="alerts-list-container"></div>
+        `;
         document.body.appendChild(alertsView);
     }
     
@@ -528,22 +664,32 @@ function showAlertsView() {
     fetch(`${CONFIG.API_BASE_URL}/signalements/latest/?limit=20`)
         .then(r => r.json())
         .then(signalements => {
-            alertsView.innerHTML = signalements.map(s => `
+            const container = document.getElementById('alerts-list-container');
+            if (signalements.length === 0) {
+                container.innerHTML = '<div class="empty-state">Aucun signalement récent</div>';
+                return;
+            }
+            
+            container.innerHTML = signalements.map(s => `
                 <div class="alert-item ${s.status === 'Épuisé' ? 'empty' : ''}">
                     <div class="alert-header">
                         <span class="alert-station">${s.station_name}</span>
                         <span class="alert-time">${s.time_ago}</span>
                     </div>
                     <div class="alert-message">
-                        ${s.fuel_type} ${s.status.toLowerCase()} - ${s.approval_count} confirmation(s)
+                        <span class="alert-fuel">${s.fuel_type}</span>
+                        <span class="alert-status ${s.status === 'Disponible' ? 'available' : 'empty'}">${s.status}</span>
+                        <span class="alert-approvals">${s.approval_count} confirmation(s)</span>
                     </div>
                 </div>
             `).join('');
+        })
+        .catch(err => {
+            console.error('Error loading alerts:', err);
         });
     
     // Show alerts
-    document.querySelectorAll('#list-view, #alerts-view').forEach(el => el?.classList.remove('active'));
-    alertsView.classList.add('active');
+    alertsView.style.display = 'block';
 }
 
 function selectStationById(id) {
@@ -555,6 +701,130 @@ function selectStationById(id) {
         // Update nav
         elements.navButtons.forEach(b => b.classList.remove('active'));
         elements.navButtons[0].classList.add('active');
+    }
+}
+
+function showAddStationView() {
+    let addView = document.getElementById('add-station-view');
+    if (!addView) {
+        addView = document.createElement('div');
+        addView.id = 'add-station-view';
+        addView.className = 'view-container';
+        addView.innerHTML = `
+            <div class="view-header">
+                <h2>Ajouter une station</h2>
+                <p class="view-subtitle">Ajoutez une nouvelle station dans la carte communautaire</p>
+            </div>
+            <form id="add-station-form" class="station-form">
+                <label class="form-label" for="station-name-input">Nom de la station *</label>
+                <input id="station-name-input" name="name" class="form-input" type="text" required maxlength="100" placeholder="Ex: Station ACI 2000">
+
+                <label class="form-label" for="station-brand-input">Enseigne *</label>
+                <input id="station-brand-input" name="brand" class="form-input" type="text" required maxlength="50" placeholder="Ex: Shell, Total, Oryx">
+
+                <label class="form-label" for="station-address-input">Lieu / Adresse</label>
+                <input id="station-address-input" name="address" class="form-input" type="text" maxlength="255" placeholder="Ex: Badalabougou, Bamako">
+
+                <div class="form-grid">
+                    <div>
+                        <label class="form-label" for="station-lat-input">Latitude GPS *</label>
+                        <input id="station-lat-input" name="latitude" class="form-input" type="number" required step="any" min="-90" max="90" placeholder="12.6392">
+                    </div>
+                    <div>
+                        <label class="form-label" for="station-lon-input">Longitude GPS *</label>
+                        <input id="station-lon-input" name="longitude" class="form-input" type="number" required step="any" min="-180" max="180" placeholder="-8.0029">
+                    </div>
+                </div>
+
+                <label class="form-label" for="station-manager-input">Nom du gérant</label>
+                <input id="station-manager-input" name="manager_name" class="form-input" type="text" maxlength="100" placeholder="Ex: Moussa Traoré">
+
+                <button id="add-station-submit" class="form-submit-btn" type="submit">Enregistrer la station</button>
+            </form>
+        `;
+        document.body.appendChild(addView);
+
+        const form = addView.querySelector('#add-station-form');
+        form.addEventListener('submit', handleAddStationSubmit);
+    }
+
+    addView.style.display = 'block';
+}
+
+function parseCoordinate(value) {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
+async function handleAddStationSubmit(event) {
+    event.preventDefault();
+
+    const form = event.target;
+    const submitButton = form.querySelector('#add-station-submit');
+    const formData = new FormData(form);
+
+    const latitude = parseCoordinate(formData.get('latitude'));
+    const longitude = parseCoordinate(formData.get('longitude'));
+
+    if (latitude === null || latitude < -90 || latitude > 90) {
+        showToast('Latitude invalide (-90 à 90)', 'error');
+        return;
+    }
+
+    if (longitude === null || longitude < -180 || longitude > 180) {
+        showToast('Longitude invalide (-180 à 180)', 'error');
+        return;
+    }
+
+    const payload = {
+        name: String(formData.get('name') || '').trim(),
+        brand: String(formData.get('brand') || '').trim(),
+        address: String(formData.get('address') || '').trim(),
+        latitude,
+        longitude,
+        manager_name: String(formData.get('manager_name') || '').trim(),
+        is_active: true,
+    };
+
+    if (!payload.name || !payload.brand) {
+        showToast('Nom et enseigne sont obligatoires', 'error');
+        return;
+    }
+
+    submitButton.disabled = true;
+
+    try {
+        const response = await fetch(`${CONFIG.API_BASE_URL}/stations/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+        });
+
+        const responseData = await response.json();
+
+        if (!response.ok) {
+            const errorMessage = responseData.error || 'Erreur lors de la création de la station';
+            throw new Error(errorMessage);
+        }
+
+        showToast('Station ajoutée avec succès', 'success');
+
+        form.reset();
+
+        state.pagination.page = 1;
+        state.stations = [];
+        await loadStations();
+
+        switchView('map');
+        elements.navButtons.forEach(b => b.classList.remove('active'));
+        elements.navButtons[0].classList.add('active');
+    } catch (error) {
+        console.error('Error creating station:', error);
+        showToast(error.message, 'error');
+    } finally {
+        submitButton.disabled = false;
     }
 }
 

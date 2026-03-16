@@ -8,6 +8,51 @@ API REST pour gérer les stations de carburant à Bamako et les signalements de 
 http://localhost:8000/api/
 ```
 
+## Authentification JWT
+
+L'API utilise JWT pour les opérations d'écriture.
+
+### Obtenir un token
+**POST** `/auth/token/`
+
+**Body:**
+```json
+{
+  "username": "votre_utilisateur",
+  "password": "votre_mot_de_passe"
+}
+```
+
+**Réponse (200 OK):**
+```json
+{
+  "access": "<jwt_access_token>",
+  "refresh": "<jwt_refresh_token>"
+}
+```
+
+### Rafraîchir un token
+**POST** `/auth/token/refresh/`
+
+**Body:**
+```json
+{
+  "refresh": "<jwt_refresh_token>"
+}
+```
+
+**Réponse (200 OK):**
+```json
+{
+  "access": "<nouveau_jwt_access_token>"
+}
+```
+
+### Utiliser le token
+Ajouter l'en-tête HTTP suivant:
+
+`Authorization: Bearer <jwt_access_token>`
+
 ---
 
 ## Endpoints Stations
@@ -80,7 +125,7 @@ GET /stations/?lat=12.6452&lon=-8.0029&radius=5
 
 **Réponse (200 OK):** Liste des stations à proximité avec distances
 
-### 4. Créer une station (Admin)
+### 4. Créer une station (Authentifié)
 **POST** `/stations/`
 
 **Body:**
@@ -88,22 +133,25 @@ GET /stations/?lat=12.6452&lon=-8.0029&radius=5
 {
   "name": "Nouvelle Station",
   "brand": "Total",
+  "address": "Badalabougou",
   "latitude": 12.6500,
-  "longitude": -8.0100
+  "longitude": -8.0100,
+  "manager_name": "Moussa Traoré",
+  "is_active": true
 }
 ```
 
-### 5. Mettre à jour une station (Admin)
+### 5. Mettre à jour une station (Authentifié)
 **PUT/PATCH** `/stations/{id}/`
 
-### 6. Supprimer une station (Admin)
+### 6. Supprimer une station (Authentifié)
 **DELETE** `/stations/{id}/`
 
 ---
 
 ## Endpoints Signalements
 
-### 1. Créer un signalement
+### 1. Créer un signalement (Authentifié)
 **POST** `/signalements/`
 
 **Body:**
@@ -134,7 +182,7 @@ GET /stations/?lat=12.6452&lon=-8.0029&radius=5
 - `400 Bad Request`: Station manquante ou vote en doublon (1h)
 - `404 Not Found`: Station inexistante
 
-### 2. Approuver un signalement
+### 2. Approuver un signalement (Authentifié)
 **POST** `/signalements/{id}/approve/`
 
 **Réponse (200 OK):** Signalement mis à jour avec `approval_count` incrémenté
@@ -253,6 +301,29 @@ GET /stations/?lat=12.6452&lon=-8.0029&radius=5
     "count": 5
   }
 ]
+```
+
+---
+
+## Endpoints Monitoring
+
+### 1. Health check (public)
+**GET** `/health/`
+
+### 2. Monitoring opérationnel (authentifié)
+**GET** `/monitoring/`
+
+**Réponse (200 OK):**
+```json
+{
+  "status": "ok",
+  "database": "connected",
+  "cache": "ok",
+  "total_stations": 50,
+  "active_signalements_4h": 18,
+  "log_level": 20,
+  "timestamp": "2026-03-15T22:00:00Z"
+}
 ```
 
 ---
