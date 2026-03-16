@@ -1,46 +1,50 @@
-# Stage 1: Builder
+# --- Stage 1: Build ---
 FROM python:3.12-slim as builder
+
+# Empêche Python d'écrire des fichiers .pyc et force l'affichage des logs en temps réel
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
 
 WORKDIR /app
 
-# Installer les dépendances système
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Installation des dépendances système pour compiler psycopg2 ou d'autres libs
+RUN apt-get update && apt-get install -y \
     build-essential \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copier requirements et installer les dépendances Python
-COPY requirements.txt .
-RUN pip install --user --no-cache-dir -r requirements.txt
+# Création d'un environnement virtuel propre
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
-# Stage 2: Runtime
-FROM python:3.9-slim
+COPY requirements.txt .
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# --- Stage 2: Runtime ---
+FROM python:3.12-slim
 
 WORKDIR /app
 
-# Installer les dépendances système runtime
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq5 \
-    postgresql-client \
-    && rm -rf /var/lib/apt/lists/*
+# On installe seulement le nécessaire pour faire tourner PostgreSQL (libpq5)
+RUN apt-get update && apt-get install -y libpq5 && rm -rf /var/lib/apt/lists/*
 
-# Copier les dépendances Python depuis le builder
-COPY --from=builder /root/.local /root/.local
+# On récupère l'environnement virtuel complet du builder
+COPY --from=builder /opt/venv /opt/venv
 
-# Ajouter le répertoire local au PATH
-ENV PATH=/root/.local/bin:$PATH
+# --- CRUCIAL : On active l'environnement virtuel dans le PATH ---
+ENV PATH="/opt/venv/bin:$PATH"
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
 
-# Copier le code de l'application
+# Copier le reste du code
 COPY . .
 
-# Créer les répertoires nécessaires
+# Création des dossiers nécessaires
 RUN mkdir -p logs static media
 
-# Collecter les fichiers statiques
+# Collecte des fichiers statiques
 RUN python manage.py collectstatic --noinput || true
 
-# Exposer le port
-EXPOSE 8000
-
-# Commande de démarrage
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "4", "--timeout", "120"]
+# Commande de démarrage (ajustez 'config.wsgi' si votre dossier de config s'appelle autrement)
+CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:10000"]
