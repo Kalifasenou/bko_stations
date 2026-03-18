@@ -47,10 +47,11 @@ RUN mkdir -p logs static media
 RUN python manage.py collectstatic --noinput || true
 
 # Commande de démarrage (ajustez 'config.wsgi' si votre dossier de config s'appelle autrement)
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:10000"]
+COPY start.sh /app/start.sh
 
-COPY start.sh /backend/start.sh
-RUN chmod +x /backend/start.sh
+# 2. On donne les droits d'exécution
+RUN chmod +x /app/start.sh
 
-# On remplace l'ENTRYPOINT ou le CMD par l'appel au script
-CMD ["/backend/start.sh"]
+# 3. On définit le script comme commande de démarrage
+# (Supprime toute autre ligne CMD ou ENTRYPOINT avant celle-ci)
+CMD ["/app/start.sh"]
