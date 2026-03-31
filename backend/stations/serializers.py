@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import Station, Signalement
+from .constants import FUEL_TYPES, FUEL_STATUS
 
 
 class SignalementSerializer(serializers.ModelSerializer):
@@ -17,6 +18,38 @@ class SignalementSerializer(serializers.ModelSerializer):
             'time_ago', 'is_expired', 'comment'
         ]
         read_only_fields = ['id', 'timestamp', 'approval_count']
+
+    def validate_fuel_type(self, value):
+        """Valide le type de carburant"""
+        valid_fuel_types = [fuel for fuel in FUEL_TYPES.values()]
+        if value not in valid_fuel_types:
+            raise serializers.ValidationError(
+                f"Le type de carburant doit être l'un des suivants: {', '.join(valid_fuel_types)}"
+            )
+        return value
+
+    def validate_status(self, value):
+        """Valide le statut du carburant"""
+        valid_statuses = [status for status in FUEL_STATUS.values()]
+        if value not in valid_statuses:
+            raise serializers.ValidationError(
+                f"Le statut doit être l'un des suivants: {', '.join(valid_statuses)}"
+            )
+        return value
+
+    def validate(self, attrs):
+        """Validation globale du signalement"""
+        station = attrs.get('station')
+        fuel_type = attrs.get('fuel_type')
+        
+        if station and fuel_type:
+            # Vérifier que la station existe et est active
+            if not station.is_active:
+                raise serializers.ValidationError(
+                    {"station": "Cette station n'est plus active"}
+                )
+        
+        return attrs
 
     def get_time_ago(self, obj):
         """Retourne le temps écoulé depuis le signalement"""
@@ -84,3 +117,21 @@ class StationSerializer(serializers.ModelSerializer):
     def get_distance(self, obj):
         """Retourne la distance si l'utilisateur a fourni sa position"""
         return getattr(obj, 'distance', None)
+
+    def validate(self, attrs):
+        """Validation globale de la station"""
+        lat = attrs.get('latitude')
+        lon = attrs.get('longitude')
+        
+        if lat is not None and lon is not None:
+            # Validation basique des coordonnées
+            if not (-90 <= lat <= 90):
+                raise serializers.ValidationError(
+                    {"latitude": "La latitude doit être entre -90 et 90"}
+                )
+            if not (-180 <= lon <= 180):
+                raise serializers.ValidationError(
+                    {"longitude": "La longitude doit être entre -180 et 180"}
+                )
+        
+        return attrs

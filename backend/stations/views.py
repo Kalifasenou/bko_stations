@@ -1,8 +1,9 @@
 from rest_framework import viewsets, status
-from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.decorators import action, api_view, permission_classes, throttle_classes
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticatedOrReadOnly, IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from django.utils import timezone
 from django.views.decorators.cache import cache_page
 from django.utils.decorators import method_decorator
@@ -10,6 +11,7 @@ from datetime import timedelta
 from django.db.models import F, Count, Q, Prefetch
 from django.shortcuts import get_object_or_404
 from django.core.exceptions import ValidationError
+from django.core.cache import cache
 import math
 import logging
 
@@ -18,6 +20,23 @@ from .serializers import StationSerializer, SignalementSerializer
 from .utils import get_user_ip, validate_coordinates as utils_validate_coordinates
 
 logger = logging.getLogger(__name__)
+
+
+# Rate limiting throttles
+class SignalementAnonRateThrottle(AnonRateThrottle):
+    rate = '10/hour'
+
+class SignalementUserRateThrottle(UserRateThrottle):
+    rate = '20/hour'
+
+
+def rate_limit_signalements(zone='anon'):
+    """Décorateur pour limiter les signalements par IP"""
+    def decorator(view_func):
+        if zone == 'anon':
+            return throttle_classes([SignalementAnonRateThrottle])(view_func)
+        return throttle_classes([SignalementUserRateThrottle])(view_func)
+    return decorator
 
 
 class StandardResultsSetPagination(PageNumberPagination):
@@ -131,6 +150,7 @@ class SignalementViewSet(viewsets.ModelViewSet):
     queryset = Signalement.objects.all()
     serializer_class = SignalementSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
+    throttle_classes = [SignalementAnonRateThrottle, SignalementUserRateThrottle]
 
     def create(self, request, *args, **kwargs):
         """Créer un nouveau signalement avec validation IP et incrémentation"""
@@ -491,6 +511,88 @@ def fuel_availability_map(request):
         logger.error(f"Erreur dans fuel_availability_map: {e}")
         return Response(
             {"error": "Erreur lors de la génération de la carte"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def brands_list(request):
+    """Retourne la liste de toutes les marques de stations"""
+    try:
+        brands = Station.objects.filter(is_active=True).values_list('brand', flat=True).distinct()
+        brands = sorted([b for b in brands if b])
+        return Response({
+            'brands': brands,
+            'count': len(brands)
+        })
+    except Exception as e:
+        logger.error(f"Erreur dans brands_list: {e}")
+        return Response(
+            {"error": "Erreur lors de la récupération des marques"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def stations_nearby(request):
+    """Retourne les stations à proximité de la position de l'utilisateur"""
+    try:
+        lat = request.query_params.get('lat')
+        lon = request.query_params.get('lon')
+        radius = float(request.query_params.get('radius', 10))
+        
+        if not lat or not lon:
+            return Response(
+                {"error": "Les paramètres 'lat' et 'lon' sont requis"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            lat, lon = utils_validate_coordinates(lat, lon)
+        except ValidationError as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if radius <= 0 or radius > 100:
+            return Response(
+                {"error": "Le rayon doit être entre 0.1 et 100 km"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Récupérer toutes les stations actives
+        stations = Station.objects.filter(is_active=True)
+        
+        # Calculer les distances et filtrer
+        nearby_stations = []
+        for station in stations:
+            distance = calculate_distance(lat, lon, station.latitude, station.longitude)
+            if distance <= radius:
+                station.distance = round(distance, 1)
+                nearby_stations.append(station)
+        
+        # Trier par distance
+        nearby_stations.sort(key=lambda x: x.distance)
+        
+        serializer = StationSerializer(nearby_stations, many=True)
+        return Response({
+            'stations': serializer.data,
+            'count': len(nearby_stations),
+            'user_location': {'lat': lat, 'lon': lon}
+        })
+    except ValueError as e:
+        logger.error(f"Erreur dans stations_nearby: {e}")
+        return Response(
+            {"error": "Paramètres invalides"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    except Exception as e:
+        logger.error(f"Erreur dans stations_nearby: {e}")
+        return Response(
+            {"error": "Erreur lors de la recherche"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 

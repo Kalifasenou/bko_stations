@@ -47,7 +47,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware'
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -282,3 +282,18 @@ CSRF_COOKIE_SECURE = os.getenv(
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Rate Limiting (application-level)
+RATE_LIMIT = {
+    'SIGNALEMENT_CREATE': 10,  # Max 10 signalements par heure par IP
+    'SEARCH': 60,  # Max 60 recherches par minute
+    'GENERAL': 100,  # Max 100 requêtes par minute
+}
+
+# Feature flags
+FEATURES = {
+    'ENABLE_SIGNALEMENT_APPROVAL': True,
+    'ENABLE_COMMENTS': True,
+    'ENABLE_NEARBY_SEARCH': True,
+    'ENABLE_HEATMAP': True,
+}
