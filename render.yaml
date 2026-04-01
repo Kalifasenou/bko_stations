@@ -18,13 +18,13 @@ services:
       - key: SECRET_KEY
         generateValue: true
       - key: ALLOWED_HOSTS
-        value: bko-stations.onrender.com
+        value: bko-stations.onrender.com,bko-station-backend.onrender.com
       - key: CORS_ALLOW_ALL_ORIGINS
         value: "False"
       - key: CORS_ALLOWED_ORIGINS
         value: https://bko-stations-frontend.onrender.com
       - key: CSRF_TRUSTED_ORIGINS
-        value: https://bko-stations.onrender.com,https://bko-stations-frontend.onrender.com
+        value: https://bko-stations.onrender.com,https://bko-station-backend.onrender.com,https://bko-stations-frontend.onrender.com
       - key: SECURE_SSL_REDIRECT
         value: "True"
       - key: SESSION_COOKIE_SECURE
