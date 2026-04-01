@@ -8,7 +8,7 @@ from django.utils import timezone
 from django.views.decorators.cache import cache_page
 from django.utils.decorators import method_decorator
 from datetime import timedelta
-from django.db.models import F, Count, Q, Prefetch
+from django.db.models import F, Count, Q, Prefetch, Case, When, IntegerField
 from django.shortcuts import get_object_or_404
 from django.core.exceptions import ValidationError
 from django.core.cache import cache
@@ -89,23 +89,31 @@ class StationViewSet(viewsets.ModelViewSet):
                 
                 # Récupérer toutes les stations et calculer les distances
                 stations_with_distance = []
+                distance_map = {}
                 for station in queryset:
                     distance = calculate_distance(lat, lon, station.latitude, station.longitude)
                     if distance <= radius:
-                        station.distance = round(distance, 1)
+                        rounded_distance = round(distance, 1)
+                        station.distance = rounded_distance
                         stations_with_distance.append(station)
+                        distance_map[station.id] = rounded_distance
                 
-                # Trier par distance et retourner comme QuerySet
+                # Trier par distance et conserver l'ordre pour la pagination
                 stations_with_distance.sort(key=lambda x: x.distance)
-                # Convertir en QuerySet pour la pagination
                 ids = [s.id for s in stations_with_distance]
-                queryset = Station.objects.filter(id__in=ids).order_by('id')
-                # Réappliquer les distances
+                
+                if not ids:
+                    return Station.objects.none()
+                
+                preserved_order = Case(
+                    *[When(pk=pk, then=pos) for pos, pk in enumerate(ids)],
+                    output_field=IntegerField()
+                )
+                queryset = Station.objects.filter(id__in=ids).annotate(_distance_order=preserved_order).order_by('_distance_order')
+                
+                # Réappliquer les distances après réévaluation du QuerySet
                 for station in queryset:
-                    for s in stations_with_distance:
-                        if s.id == station.id:
-                            station.distance = s.distance
-                            break
+                    station.distance = distance_map.get(station.id)
             except ValidationError as e:
                 logger.warning(f"Erreur de validation GPS: {e}")
                 return Station.objects.none()
@@ -211,7 +219,16 @@ class SignalementViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def latest(self, request):
         """Retourne les derniers signalements (pour le live pulse)"""
-        limit = int(request.query_params.get('limit', 10))
+        try:
+            limit = int(request.query_params.get('limit', 10))
+        except ValueError:
+            return Response(
+                {"error": "Le paramètre 'limit' doit être un nombre entier"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        limit = max(1, min(limit, 50))
+
         signalements = Signalement.objects.filter(
             timestamp__gte=timezone.now() - timedelta(hours=4)
         ).order_by('-timestamp')[:limit]
@@ -257,11 +274,29 @@ class SignalementViewSet(viewsets.ModelViewSet):
                 {"error": "Le paramètre 'station_id' est requis"},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
+        try:
+            station_id = int(station_id)
+        except ValueError:
+            return Response(
+                {"error": "Le paramètre 'station_id' doit être un entier"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            limit = int(request.query_params.get('limit', 50))
+        except ValueError:
+            return Response(
+                {"error": "Le paramètre 'limit' doit être un nombre entier"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        limit = max(1, min(limit, 200))
+
         signalements = Signalement.objects.filter(
             station_id=station_id,
             timestamp__gte=timezone.now() - timedelta(hours=4)
-        ).order_by('-timestamp')
+        ).order_by('-timestamp')[:limit]
         
         serializer = self.get_serializer(signalements, many=True)
         return Response(serializer.data)
@@ -606,6 +641,8 @@ def signalements_heatmap(request):
         hours = int(request.query_params.get('hours', 24))
         if hours <= 0:
             raise ValidationError("Le nombre d'heures doit être positif")
+        if hours > 168:
+            raise ValidationError("Le nombre d'heures ne peut pas dépasser 168 (7 jours)")
         
         time_threshold = timezone.now() - timedelta(hours=hours)
         

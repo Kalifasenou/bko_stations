@@ -87,6 +87,9 @@ async function initApp() {
         
         // Start live pulse
         startLivePulse();
+
+        // Start periodic stations refresh
+        startStationsRefresh();
         
         // Setup PWA
         setupPWA();
@@ -395,8 +398,18 @@ async function reportAvailability(fuelType, status) {
         });
         
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Erreur lors du signalement');
+            let errorPayload = {};
+            try {
+                errorPayload = await response.json();
+            } catch (_) {
+                // no-op: fallback message below
+            }
+
+            if (response.status === 401) {
+                throw new Error('Connexion requise pour envoyer un signalement');
+            }
+
+            throw new Error(errorPayload.error || 'Erreur lors du signalement');
         }
         
         const data = await response.json();
@@ -430,6 +443,27 @@ async function reportAvailability(fuelType, status) {
 async function startLivePulse() {
     await updatePulse();
     setInterval(updatePulse, CONFIG.PULSE_INTERVAL);
+}
+
+function startStationsRefresh() {
+    setInterval(async () => {
+        try {
+            const selectedStationId = state.selectedStation?.id;
+
+            state.pagination.page = 1;
+            state.stations = [];
+            await loadStations();
+
+            if (selectedStationId) {
+                const refreshedStation = state.stations.find(s => s.id === selectedStationId);
+                if (refreshedStation) {
+                    selectStation(refreshedStation);
+                }
+            }
+        } catch (error) {
+            console.error('Error refreshing stations:', error);
+        }
+    }, CONFIG.REFRESH_INTERVAL);
 }
 
 async function updatePulse() {
@@ -545,9 +579,9 @@ async function submitSignalement(fuelType, status) {
     if (fuelType === 'both') {
         // Report both fuel types
         await reportAvailability('Essence', status);
-        setTimeout(() => reportAvailability('Gazole', status), 500);
+        await reportAvailability('Gazole', status);
     } else {
-        reportAvailability(fuelType, status);
+        await reportAvailability(fuelType, status);
     }
 }
 
@@ -563,6 +597,11 @@ function switchView(view) {
         case 'map':
             document.getElementById('map').style.display = 'block';
             closeStationSheet();
+            setTimeout(() => {
+                if (state.map) {
+                    state.map.invalidateSize();
+                }
+            }, 0);
             break;
         case 'list':
             showListView();
@@ -805,6 +844,9 @@ async function handleAddStationSubmit(event) {
         const responseData = await response.json();
 
         if (!response.ok) {
+            if (response.status === 401) {
+                throw new Error('Connexion requise pour ajouter une station');
+            }
             const errorMessage = responseData.error || 'Erreur lors de la création de la station';
             throw new Error(errorMessage);
         }
