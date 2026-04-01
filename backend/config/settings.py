@@ -31,7 +31,7 @@ DEBUG = False
 ALLOWED_HOSTS = [
     host.strip() for host in os.getenv(
         'ALLOWED_HOSTS',
-        'bko-stations.onrender.com,localhost,127.0.0.1'
+        'bko-stations.onrender.com,localhost,127.0.0.1,bko-station.onrender.com'
     ).split(',') if host.strip()
 ]
 
