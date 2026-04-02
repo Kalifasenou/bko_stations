@@ -52,6 +52,8 @@ const elements = {
     trustScore: document.getElementById('trust-score'),
     stationDistance: document.getElementById('station-distance'),
     distanceRow: document.getElementById('distance-row'),
+    electricityStatus: document.getElementById('electricity-status'),
+    gasoilSituation: document.getElementById('gasoil-situation'),
     // Fuel cards
     essenceCard: document.getElementById('essence-card'),
     gazoleCard: document.getElementById('gazole-card'),
@@ -282,6 +284,9 @@ function selectStation(station) {
     } else {
         elements.distanceRow.style.display = 'none';
     }
+
+    // Update additional situations
+    updateAdditionalSituations(station);
     
     // Update fuel cards with BOTH fuel types
     updateFuelCards(station);
@@ -322,6 +327,19 @@ function updateFuelCards(station) {
     if (gazoleData) {
         elements.gazoleCard.className = `fuel-card ${gazoleData.status === 'Disponible' ? 'available' : 'empty'}`;
         elements.gazoleStatus.textContent = `${gazoleData.status} (${gazoleData.time_ago})`;
+    }
+}
+
+function updateAdditionalSituations(station) {
+    const gazoleData = station.gazole_signalement;
+
+    // L'électricité n'est pas encore fournie par l'API
+    elements.electricityStatus.textContent = 'Non disponible dans l’API';
+
+    if (gazoleData) {
+        elements.gasoilSituation.textContent = `${gazoleData.status} (${gazoleData.time_ago})`;
+    } else {
+        elements.gasoilSituation.textContent = 'Non signalé';
     }
 }
 
