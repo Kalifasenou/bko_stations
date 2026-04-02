@@ -12,6 +12,8 @@ from django.db.models import F, Count, Q, Prefetch, Case, When, IntegerField
 from django.shortcuts import get_object_or_404
 from django.core.exceptions import ValidationError
 from django.core.cache import cache
+from django.contrib.auth import get_user_model
+from rest_framework_simplejwt.tokens import RefreshToken
 import math
 import logging
 
@@ -355,6 +357,12 @@ def statistics(request):
             fuel_type='Gazole',
             status='Disponible'
         ).count()
+
+        electricite_disponible = Signalement.objects.filter(
+            timestamp__gte=four_hours_ago,
+            fuel_type='Électricité',
+            status='Disponible'
+        ).count()
         
         # Top stations avec le plus de signalements
         top_stations = Station.objects.filter(is_active=True).annotate(
@@ -371,6 +379,7 @@ def statistics(request):
             'fuel_availability': {
                 'essence_disponible': essence_disponible,
                 'gazole_disponible': gazole_disponible,
+                'electricite_disponible': electricite_disponible,
             },
             'top_stations': [
                 {'id': s.id, 'name': s.name, 'brand': s.brand, 'count': s.signalement_count}
@@ -665,6 +674,46 @@ def signalements_heatmap(request):
             {"error": "Erreur lors de la génération de la heatmap"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def register_user(request):
+    """Créer un compte utilisateur et retourner des tokens JWT"""
+    username = str(request.data.get('username', '')).strip()
+    password = str(request.data.get('password', '')).strip()
+
+    if len(username) < 3:
+        return Response(
+            {'error': "Le nom d'utilisateur doit contenir au moins 3 caractères"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    if len(password) < 8:
+        return Response(
+            {'error': 'Le mot de passe doit contenir au moins 8 caractères'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    User = get_user_model()
+
+    if User.objects.filter(username=username).exists():
+        return Response(
+            {'error': "Ce nom d'utilisateur existe déjà"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    user = User.objects.create_user(username=username, password=password)
+    refresh = RefreshToken.for_user(user)
+
+    return Response(
+        {
+            'user': {'id': user.id, 'username': user.username},
+            'refresh': str(refresh),
+            'access': str(refresh.access_token),
+        },
+        status=status.HTTP_201_CREATED
+    )
 
 
 @api_view(['GET'])

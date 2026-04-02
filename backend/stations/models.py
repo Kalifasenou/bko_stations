@@ -69,8 +69,9 @@ class Station(models.Model):
         """Retourne la couleur selon le statut global de la station."""
         essence = self.get_latest_signalement_for_fuel('Essence')
         gazole = self.get_latest_signalement_for_fuel('Gazole')
+        electricite = self.get_latest_signalement_for_fuel('Électricité')
 
-        signals = [s for s in (essence, gazole) if s]
+        signals = [s for s in (essence, gazole, electricite) if s]
         if not signals:
             return 'gray'
 
@@ -96,6 +97,7 @@ class Signalement(models.Model):
     FUEL_TYPES = [
         ('Essence', 'Essence'),
         ('Gazole', 'Gazole'),
+        ('Électricité', 'Électricité'),
     ]
     STATUS_CHOICES = [
         ('Disponible', 'Disponible'),

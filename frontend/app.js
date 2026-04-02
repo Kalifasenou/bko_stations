@@ -25,11 +25,18 @@ const state = {
     userLocation: null,
     currentView: 'map',
     lastUpdate: null,
+    authToken: null,
+    currentUser: null,
     pagination: {
         page: 1,
         hasMore: true,
         loading: false,
     },
+};
+
+const AUTH_STORAGE_KEYS = {
+    TOKEN: 'bko_auth_token',
+    USERNAME: 'bko_auth_username',
 };
 
 // ============================================
@@ -62,6 +69,9 @@ const elements = {
     // Action buttons
     btnAvailable: document.getElementById('btn-available'),
     btnEmpty: document.getElementById('btn-empty'),
+    // Auth
+    authInfo: document.getElementById('auth-info'),
+    authToggle: document.getElementById('auth-toggle'),
     // Navigation
     navButtons: document.querySelectorAll('.nav-btn'),
 };
@@ -75,6 +85,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function initApp() {
     try {
+        initAuth();
+
         // Initialize map
         initMap();
         
@@ -332,9 +344,13 @@ function updateFuelCards(station) {
 
 function updateAdditionalSituations(station) {
     const gazoleData = station.gazole_signalement;
+    const electricityData = station.electricity_signalement;
 
-    // L'électricité n'est pas encore fournie par l'API
-    elements.electricityStatus.textContent = 'Non disponible dans l’API';
+    if (electricityData) {
+        elements.electricityStatus.textContent = `${electricityData.status} (${electricityData.time_ago})`;
+    } else {
+        elements.electricityStatus.textContent = 'Non signalé';
+    }
 
     if (gazoleData) {
         elements.gasoilSituation.textContent = `${gazoleData.status} (${gazoleData.time_ago})`;
@@ -346,6 +362,176 @@ function updateAdditionalSituations(station) {
 function closeStationSheet() {
     elements.stationSheet.classList.remove('active');
     state.selectedStation = null;
+}
+
+// ============================================
+// AUTHENTICATION
+// ============================================
+function initAuth() {
+    state.authToken = localStorage.getItem(AUTH_STORAGE_KEYS.TOKEN);
+    const savedUsername = localStorage.getItem(AUTH_STORAGE_KEYS.USERNAME);
+    state.currentUser = savedUsername ? { username: savedUsername } : null;
+
+    if (elements.authToggle) {
+        elements.authToggle.addEventListener('click', () => {
+            if (state.authToken) {
+                logout();
+                return;
+            }
+            showAuthModal('login');
+        });
+    }
+
+    updateAuthUI();
+}
+
+function updateAuthUI() {
+    const isAuthenticated = Boolean(state.authToken);
+
+    if (elements.authInfo) {
+        elements.authInfo.textContent = isAuthenticated
+            ? `Connecté: ${state.currentUser?.username || 'utilisateur'}`
+            : 'Mode invité';
+    }
+
+    if (elements.authToggle) {
+        elements.authToggle.textContent = isAuthenticated ? 'Se déconnecter' : 'Se connecter';
+    }
+}
+
+function logout() {
+    state.authToken = null;
+    state.currentUser = null;
+    localStorage.removeItem(AUTH_STORAGE_KEYS.TOKEN);
+    localStorage.removeItem(AUTH_STORAGE_KEYS.USERNAME);
+    updateAuthUI();
+    showToast('Déconnexion effectuée', 'success');
+}
+
+function getAuthHeaders() {
+    if (!state.authToken) {
+        return {};
+    }
+    return {
+        Authorization: `Bearer ${state.authToken}`,
+    };
+}
+
+function requireAuth(actionLabel) {
+    if (state.authToken) {
+        return true;
+    }
+
+    showToast(`Connexion requise pour ${actionLabel}`, 'error');
+    showAuthModal('login');
+    return false;
+}
+
+function showAuthModal(mode = 'login') {
+    let modal = document.getElementById('auth-modal');
+
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'auth-modal';
+        modal.className = 'modal-overlay';
+        document.body.appendChild(modal);
+    }
+
+    const isLogin = mode === 'login';
+    modal.innerHTML = `
+        <div class="modal-content auth-modal-content">
+            <h3>${isLogin ? 'Connexion' : 'Créer un compte'}</h3>
+            <form id="auth-form" class="auth-form">
+                <input id="auth-username" class="form-input" type="text" name="username" minlength="3" maxlength="150" required placeholder="Nom d'utilisateur">
+                <input id="auth-password" class="form-input" type="password" name="password" minlength="8" required placeholder="Mot de passe">
+                <button id="auth-submit" class="form-submit-btn" type="submit">${isLogin ? 'Se connecter' : 'Créer le compte'}</button>
+            </form>
+            <button id="auth-switch" class="modal-close" type="button">${isLogin ? 'Créer un compte' : 'J’ai déjà un compte'}</button>
+            <button id="auth-close" class="modal-close" type="button">Fermer</button>
+        </div>
+    `;
+
+    const form = modal.querySelector('#auth-form');
+    const authSwitch = modal.querySelector('#auth-switch');
+    const authClose = modal.querySelector('#auth-close');
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const username = String(form.username.value || '').trim();
+        const password = String(form.password.value || '').trim();
+
+        if (!username || !password) {
+            showToast('Identifiants requis', 'error');
+            return;
+        }
+
+        try {
+            if (isLogin) {
+                await login(username, password);
+            } else {
+                await register(username, password);
+            }
+            modal.style.display = 'none';
+        } catch (error) {
+            showToast(error.message, 'error');
+        }
+    });
+
+    authSwitch.addEventListener('click', () => {
+        showAuthModal(isLogin ? 'register' : 'login');
+    });
+
+    authClose.addEventListener('click', () => {
+        modal.style.display = 'none';
+    });
+
+    modal.style.display = 'flex';
+}
+
+async function login(username, password) {
+    const response = await fetch(`${CONFIG.API_BASE_URL}/auth/token/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, password }),
+    });
+
+    const payload = await response.json();
+
+    if (!response.ok || !payload.access) {
+        throw new Error(payload.detail || 'Connexion impossible');
+    }
+
+    state.authToken = payload.access;
+    state.currentUser = { username };
+    localStorage.setItem(AUTH_STORAGE_KEYS.TOKEN, payload.access);
+    localStorage.setItem(AUTH_STORAGE_KEYS.USERNAME, username);
+    updateAuthUI();
+    showToast('Connexion réussie', 'success');
+}
+
+async function register(username, password) {
+    const response = await fetch(`${CONFIG.API_BASE_URL}/auth/register/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, password }),
+    });
+
+    const payload = await response.json();
+
+    if (!response.ok || !payload.access) {
+        throw new Error(payload.error || 'Création du compte impossible');
+    }
+
+    state.authToken = payload.access;
+    state.currentUser = { username: payload.user?.username || username };
+    localStorage.setItem(AUTH_STORAGE_KEYS.TOKEN, payload.access);
+    localStorage.setItem(AUTH_STORAGE_KEYS.USERNAME, state.currentUser.username);
+    updateAuthUI();
+    showToast('Compte créé et connecté', 'success');
 }
 
 // ============================================
@@ -395,23 +581,26 @@ function addUserMarker(location) {
 // ============================================
 // SIGNALEMENT (REPORTING)
 // ============================================
-async function reportAvailability(fuelType, status) {
+async function reportAvailability(fuelType, status, comment = '') {
     if (!state.selectedStation) return;
-    
+    if (!requireAuth('envoyer un commentaire/réaction')) return;
+
     // Disable buttons
     elements.btnAvailable.disabled = true;
     elements.btnEmpty.disabled = true;
-    
+
     try {
         const response = await fetch(`${CONFIG.API_BASE_URL}/signalements/`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                ...getAuthHeaders(),
             },
             body: JSON.stringify({
                 station: state.selectedStation.id,
                 fuel_type: fuelType,
                 status: status,
+                comment,
             }),
         });
         
@@ -500,7 +689,7 @@ async function updatePulse() {
         const rotatePulse = () => {
             const s = signalements[index % signalements.length];
             const status = s.status === 'Disponible' ? '✅' : '❌';
-            const fuel = s.fuel_type === 'Essence' ? 'Essence' : 'Gazole';
+            const fuel = s.fuel_type || 'Carburant';
             elements.pulseText.textContent = `${status} ${s.station_name}: ${fuel} ${s.status.toLowerCase()} (${s.time_ago})`;
             index++;
         };
@@ -551,56 +740,67 @@ function setupEventListeners() {
 // FUEL TYPE SELECTOR
 // ============================================
 function showFuelTypeSelector(status) {
+    if (!requireAuth('envoyer un commentaire/réaction')) {
+        return;
+    }
+
     // Create modal if not exists
     let modal = document.getElementById('fuel-type-modal');
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'fuel-type-modal';
         modal.className = 'modal-overlay';
-        modal.innerHTML = `
-            <div class="modal-content">
-                <h3>Quel carburant signaler ?</h3>
-                <div class="fuel-type-options">
-                    <button class="fuel-type-btn" data-fuel="Essence">
-                        ⛽ Essence
-                    </button>
-                    <button class="fuel-type-btn" data-fuel="Gazole">
-                        🚛 Gazole
-                    </button>
-                    <button class="fuel-type-btn" data-fuel="both">
-                        ⛽ + 🚛 Les deux
-                    </button>
-                </div>
-                <button class="modal-close">Annuler</button>
-            </div>
-        `;
         document.body.appendChild(modal);
-        
-        // Add event listeners
-        modal.querySelectorAll('.fuel-type-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const fuelType = btn.dataset.fuel;
-                modal.remove();
-                submitSignalement(fuelType, status);
-            });
-        });
-        
-        modal.querySelector('.modal-close').addEventListener('click', () => {
-            modal.remove();
-        });
     }
-    
+
+    modal.innerHTML = `
+        <div class="modal-content">
+            <h3>Quel carburant signaler ?</h3>
+            <div class="fuel-type-options">
+                <button class="fuel-type-btn" data-fuel="Essence">
+                    ⛽ Essence
+                </button>
+                <button class="fuel-type-btn" data-fuel="Gazole">
+                    🚛 Gazole
+                </button>
+                <button class="fuel-type-btn" data-fuel="Électricité">
+                    ⚡ Électricité
+                </button>
+                <button class="fuel-type-btn" data-fuel="all">
+                    ⛽ + 🚛 + ⚡ Les trois
+                </button>
+            </div>
+            <textarea id="signalement-comment" class="form-input" rows="3" maxlength="255" placeholder="Commentaire (optionnel)"></textarea>
+            <button class="modal-close" type="button">Annuler</button>
+        </div>
+    `;
+
+    // Add event listeners
+    modal.querySelectorAll('.fuel-type-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const fuelType = btn.dataset.fuel;
+            const comment = String(modal.querySelector('#signalement-comment')?.value || '').trim();
+            modal.style.display = 'none';
+            submitSignalement(fuelType, status, comment);
+        });
+    });
+
+    modal.querySelector('.modal-close').addEventListener('click', () => {
+        modal.style.display = 'none';
+    });
+
     modal.style.display = 'flex';
 }
 
-async function submitSignalement(fuelType, status) {
-    if (fuelType === 'both') {
-        // Report both fuel types
-        await reportAvailability('Essence', status);
-        await reportAvailability('Gazole', status);
-    } else {
-        await reportAvailability(fuelType, status);
+async function submitSignalement(fuelType, status, comment = '') {
+    if (fuelType === 'all') {
+        await reportAvailability('Essence', status, comment);
+        await reportAvailability('Gazole', status, comment);
+        await reportAvailability('Électricité', status, comment);
+        return;
     }
+
+    await reportAvailability(fuelType, status, comment);
 }
 
 function switchView(view) {
@@ -848,6 +1048,10 @@ async function handleAddStationSubmit(event) {
         return;
     }
 
+    if (!requireAuth('ajouter une station')) {
+        return;
+    }
+
     submitButton.disabled = true;
 
     try {
@@ -855,6 +1059,7 @@ async function handleAddStationSubmit(event) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                ...getAuthHeaders(),
             },
             body: JSON.stringify(payload),
         });

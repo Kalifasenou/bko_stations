@@ -78,6 +78,7 @@ class StationSerializer(serializers.ModelSerializer):
     latest_signalement = serializers.SerializerMethodField()
     essence_signalement = serializers.SerializerMethodField()
     gazole_signalement = serializers.SerializerMethodField()
+    electricity_signalement = serializers.SerializerMethodField()
     status_color = serializers.CharField(read_only=True)
     distance = serializers.SerializerMethodField(required=False)
     has_recent_signalement = serializers.BooleanField(read_only=True)
@@ -88,7 +89,7 @@ class StationSerializer(serializers.ModelSerializer):
             'id', 'name', 'brand', 'address', 'manager_name', 'phone',
             'latitude', 'longitude', 'is_active',
             'created_at', 'updated_at', 'latest_signalement',
-            'essence_signalement', 'gazole_signalement',
+            'essence_signalement', 'gazole_signalement', 'electricity_signalement',
             'status_color', 'distance', 'has_recent_signalement'
         ]
         read_only_fields = ['created_at', 'updated_at', 'status_color', 'has_recent_signalement']
@@ -110,6 +111,13 @@ class StationSerializer(serializers.ModelSerializer):
     def get_gazole_signalement(self, obj):
         """Retourne le dernier signalement non expiré pour le gazole"""
         latest = obj.get_latest_signalement_for_fuel('Gazole')
+        if latest:
+            return SignalementSerializer(latest).data
+        return None
+
+    def get_electricity_signalement(self, obj):
+        """Retourne le dernier signalement non expiré pour l'électricité"""
+        latest = obj.get_latest_signalement_for_fuel('Électricité')
         if latest:
             return SignalementSerializer(latest).data
         return None

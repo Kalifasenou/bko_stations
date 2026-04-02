@@ -61,7 +61,7 @@ html, body {
     top: 0;
     left: 0;
     right: 0;
-    bottom: 80px;
+    bottom: 120px;
     z-index: 1;
 }
 
@@ -181,7 +181,7 @@ html, body {
    ============================================ */
 .bottom-sheet {
     position: fixed;
-    bottom: 80px;
+    bottom: 120px;
     left: 0;
     right: 0;
     background: var(--bg-card);
@@ -1039,6 +1039,50 @@ html, body {
 }
 
 /* ============================================
+   AUTH BAR
+   ============================================ */
+.auth-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 80px;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    background: var(--bg-overlay);
+    border-top: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.auth-btn {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.auth-btn:hover {
+    border-color: var(--accent-green);
+}
+
+.auth-modal-content {
+    max-width: 360px;
+}
+
+.auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+/* ============================================
    VIEW CONTAINERS
    ============================================ */
 .view-container {
@@ -1046,7 +1090,7 @@ html, body {
     top: 40px;
     left: 0;
     right: 0;
-    bottom: 80px;
+    bottom: 120px;
     background: var(--bg-primary);
     z-index: 10;
     overflow-y: auto;

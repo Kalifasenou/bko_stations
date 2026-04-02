@@ -6,6 +6,7 @@ Constantes pour l'application BKO Station
 FUEL_TYPES = {
     'ESSENCE': 'Essence',
     'GAZOLE': 'Gazole',
+    'ELECTRICITE': 'Électricité',
 }
 
 # Statuts de carburant

@@ -4,7 +4,7 @@ from .views import (
     StationViewSet, SignalementViewSet, statistics, search_stations,
     stations_by_status, statistics_by_brand, fuel_availability_map,
     signalements_heatmap, health_check, monitoring_overview,
-    brands_list, stations_nearby
+    brands_list, stations_nearby, register_user
 )
 
 router = DefaultRouter()
@@ -12,6 +12,8 @@ router.register(r'stations', StationViewSet, basename='station')
 router.register(r'signalements', SignalementViewSet, basename='signalement')
 
 urlpatterns = [
+    # Auth endpoint
+    path('auth/register/', register_user, name='register-user'),
     # Health check endpoint
     path('health/', health_check, name='health-check'),
     # Statistics endpoints
