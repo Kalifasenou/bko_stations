@@ -58,7 +58,7 @@ python manage.py createsuperuser
 
 7. **Charger les données initiales (optionnel)**
 ```bash
-python manage.py seed_stations
+python seed_stations.py
 ```
 
 ## ⚙️ Configuration
@@ -72,21 +72,12 @@ SECRET_KEY=your-secret-key-here
 ALLOWED_HOSTS=localhost,127.0.0.1
 
 # Database
-DB_ENGINE=django.db.backends.sqlite3
-DB_NAME=db.sqlite3
+DATABASE_URL=sqlite:///db.sqlite3
 # Pour PostgreSQL:
-# DB_ENGINE=django.db.backends.postgresql
-# DB_NAME=bko_station
-# DB_USER=postgres
-# DB_PASSWORD=password
-# DB_HOST=localhost
-# DB_PORT=5432
+# DATABASE_URL=postgres://postgres:password@localhost:5432/bko_station
 
-# Cache
-CACHE_BACKEND=django.core.cache.backends.locmem.LocMemCache
-# Pour Redis:
-# CACHE_BACKEND=django.core.cache.backends.redis.RedisCache
-# CACHE_LOCATION=redis://127.0.0.1:6379/1
+# Cache (optionnel)
+# REDIS_URL=redis://127.0.0.1:6379/1
 
 # CORS
 CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:8000

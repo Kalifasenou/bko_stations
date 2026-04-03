@@ -3,10 +3,10 @@
  * Provides offline support and caching for PWA functionality
  */
 
-const CACHE_NAME = 'bamako-gaz-v1';
-const STATIC_CACHE = 'bamako-gaz-static-v1';
-const MAP_CACHE = 'bamako-gaz-maps-v1';
-const API_CACHE = 'bamako-gaz-api-v1';
+const CACHE_NAME = 'bamako-gaz-v2';
+const STATIC_CACHE = 'bamako-gaz-static-v2';
+const MAP_CACHE = 'bamako-gaz-maps-v2';
+const API_CACHE = 'bamako-gaz-api-v2';
 
 // Static assets to cache on install
 const STATIC_ASSETS = [
@@ -240,8 +240,8 @@ self.addEventListener('push', (event) => {
     
     const options = {
         body: data.body || 'Nouvelle mise à jour disponible',
-        icon: '/icons/icon-192.png',
-        badge: '/icons/icon-72.png',
+        icon: '/icons/icon.svg',
+        badge: '/icons/icon.svg',
         tag: data.tag || 'bamako-gaz-update',
         requireInteraction: false,
         data: data.data || {},

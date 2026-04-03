@@ -129,15 +129,23 @@ for data in stations:
         )
 
 User = get_user_model()
-admin_user, created = User.objects.get_or_create(
-    username='senou',
-    defaults={'is_staff': True, 'is_superuser': True}
-)
-admin_user.is_staff = True
-admin_user.is_superuser = True
-admin_user.is_active = True
-admin_user.set_password('Senou@2026')
-admin_user.save()
+seed_admin_username = os.getenv('SEED_ADMIN_USERNAME')
+seed_admin_password = os.getenv('SEED_ADMIN_PASSWORD')
+seed_admin_email = os.getenv('SEED_ADMIN_EMAIL', 'admin@bko-stations.local')
+
+if seed_admin_username and seed_admin_password:
+    admin_user, _ = User.objects.get_or_create(
+        username=seed_admin_username,
+        defaults={'is_staff': True, 'is_superuser': True, 'email': seed_admin_email}
+    )
+    admin_user.is_staff = True
+    admin_user.is_superuser = True
+    admin_user.is_active = True
+    admin_user.email = seed_admin_email
+    admin_user.set_password(seed_admin_password)
+    admin_user.save()
+    print(f"Admin seed prêt: username={seed_admin_username}")
+else:
+    print("SEED_ADMIN_USERNAME / SEED_ADMIN_PASSWORD absents: aucun admin seed créé.")
 
 print(f"Seed terminé: {Station.objects.count()} stations actives.")
-print("Admin prêt: username=senou, password=Senou@2026")

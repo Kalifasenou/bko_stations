@@ -139,6 +139,11 @@ class StationAPITests(APITestCase):
         self.client = APIClient()
         User = get_user_model()
         self.user = User.objects.create_user(username='apiuser', password='StrongPass123!')
+        self.staff_user = User.objects.create_user(
+            username='apistaff',
+            password='StrongPass123!',
+            is_staff=True
+        )
         self.station1 = Station.objects.create(
             name="Station 1",
             brand="Shell",
@@ -194,8 +199,8 @@ class StationAPITests(APITestCase):
         response = self.client.post('/api/stations/', data)
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
-    def test_create_station_with_manager_name_authenticated(self):
-        """Test la création d'une station avec authentification JWT"""
+    def test_create_station_with_manager_name_authenticated_non_staff_forbidden(self):
+        """Un utilisateur authentifié non staff ne peut pas créer de station"""
         token_response = self.client.post('/api/auth/token/', {
             'username': 'apiuser',
             'password': 'StrongPass123!'
@@ -209,6 +214,27 @@ class StationAPITests(APITestCase):
             'address': 'Sotuba',
             'latitude': 12.6700,
             'longitude': -7.9800,
+            'manager_name': 'Amadou Diallo',
+            'is_active': True,
+        }
+        response = self.client.post('/api/stations/', data)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_create_station_with_manager_name_staff_allowed(self):
+        """Un utilisateur staff authentifié peut créer une station"""
+        token_response = self.client.post('/api/auth/token/', {
+            'username': 'apistaff',
+            'password': 'StrongPass123!'
+        }, format='json')
+        access = token_response.data['access']
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {access}')
+
+        data = {
+            'name': 'Nouvelle Station Staff',
+            'brand': 'Oryx',
+            'address': 'Sotuba',
+            'latitude': 12.6710,
+            'longitude': -7.9810,
             'manager_name': 'Amadou Diallo',
             'is_active': True,
         }
@@ -288,6 +314,70 @@ class SignalementAPITests(APITestCase):
             f'/api/signalements/by_station/?station_id={self.station.id}'
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_create_signalement_same_status_increments_approval_count(self):
+        """Même statut récent => incrément d'approbation"""
+        token_response = self.client.post('/api/auth/token/', {
+            'username': 'signaluser',
+            'password': 'StrongPass123!'
+        }, format='json')
+        access = token_response.data['access']
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {access}')
+
+        Signalement.objects.create(
+            station=self.station,
+            fuel_type='Essence',
+            status='Disponible',
+            approval_count=2,
+            ip='10.10.10.10'
+        )
+
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f'Bearer {access}',
+            HTTP_X_FORWARDED_FOR='11.11.11.11'
+        )
+        response = self.client.post('/api/signalements/', {
+            'station': self.station.id,
+            'fuel_type': 'Essence',
+            'status': 'Disponible'
+        })
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['approval_count'], 3)
+        self.assertEqual(Signalement.objects.filter(station=self.station, fuel_type='Essence').count(), 1)
+
+    def test_create_signalement_opposite_status_creates_new_event(self):
+        """Statut opposé récent => nouveau signalement"""
+        token_response = self.client.post('/api/auth/token/', {
+            'username': 'signaluser',
+            'password': 'StrongPass123!'
+        }, format='json')
+        access = token_response.data['access']
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {access}')
+
+        Signalement.objects.create(
+            station=self.station,
+            fuel_type='Essence',
+            status='Disponible',
+            approval_count=4,
+            ip='10.10.10.10'
+        )
+
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f'Bearer {access}',
+            HTTP_X_FORWARDED_FOR='12.12.12.12'
+        )
+        response = self.client.post('/api/signalements/', {
+            'station': self.station.id,
+            'fuel_type': 'Essence',
+            'status': 'Épuisé'
+        })
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(Signalement.objects.filter(station=self.station, fuel_type='Essence').count(), 2)
+        latest = Signalement.objects.filter(station=self.station, fuel_type='Essence').order_by('-timestamp').first()
+        self.assertEqual(latest.status, 'Épuisé')
+        self.assertEqual(latest.approval_count, 1)
 
 
 class StatisticsAPITests(APITestCase):

@@ -20,6 +20,7 @@ import logging
 from .models import Station, Signalement
 from .serializers import StationSerializer, SignalementSerializer
 from .utils import get_user_ip, validate_coordinates as utils_validate_coordinates
+from .permissions import IsAdminOrReadOnly
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +68,7 @@ class StationViewSet(viewsets.ModelViewSet):
     """ViewSet pour les stations de carburant"""
     queryset = Station.objects.filter(is_active=True)
     serializer_class = StationSerializer
-    permission_classes = [IsAuthenticatedOrReadOnly]
+    permission_classes = [IsAdminOrReadOnly]
     pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
@@ -195,19 +196,19 @@ class SignalementViewSet(viewsets.ModelViewSet):
             station_id=station_id,
             fuel_type=fuel_type,
             timestamp__gte=four_hours_ago
-        ).first()
-        
-        if existing_signalement:
-            # Incrémenter le compteur d'approbations
+        ).order_by('-timestamp').first()
+
+        if existing_signalement and existing_signalement.status == new_status:
+            # Même statut: on incrémente la confiance du signal existant
             existing_signalement.approval_count = F('approval_count') + 1
             existing_signalement.timestamp = timezone.now()  # Rafraîchir le timestamp
-            existing_signalement.save()
+            existing_signalement.save(update_fields=['approval_count', 'timestamp'])
             existing_signalement.refresh_from_db()
-            
+
             serializer = self.get_serializer(existing_signalement)
             return Response(serializer.data, status=status.HTTP_200_OK)
-        
-        # Créer un nouveau signalement
+
+        # Nouveau statut (ou absence d'historique récent): créer un nouvel événement
         data = request.data.copy()
         data['ip'] = ip
         serializer = self.get_serializer(data=data)

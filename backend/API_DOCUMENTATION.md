@@ -125,7 +125,7 @@ GET /stations/?lat=12.6452&lon=-8.0029&radius=5
 
 **Réponse (200 OK):** Liste des stations à proximité avec distances
 
-### 4. Créer une station (Authentifié)
+### 4. Créer une station (Admin/Staff uniquement)
 **POST** `/stations/`
 
 **Body:**
@@ -141,10 +141,10 @@ GET /stations/?lat=12.6452&lon=-8.0029&radius=5
 }
 ```
 
-### 5. Mettre à jour une station (Authentifié)
+### 5. Mettre à jour une station (Admin/Staff uniquement)
 **PUT/PATCH** `/stations/{id}/`
 
-### 6. Supprimer une station (Authentifié)
+### 6. Supprimer une station (Admin/Staff uniquement)
 **DELETE** `/stations/{id}/`
 
 ---
@@ -163,7 +163,10 @@ GET /stations/?lat=12.6452&lon=-8.0029&radius=5
 }
 ```
 
-**Réponse (201 Created):**
+**Réponse:**
+- `201 Created` si le signalement est nouveau (aucun signalement récent identique)
+- `200 OK` si un signalement récent existe déjà avec le même statut (incrément de `approval_count`)
+
 ```json
 {
   "id": 10,
