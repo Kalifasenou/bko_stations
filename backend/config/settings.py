@@ -14,6 +14,7 @@ from pathlib import Path
 import os
 import sys
 from datetime import timedelta
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -22,11 +23,19 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-dev-key-change-me')
+IS_TESTING = 'test' in sys.argv
+ENVIRONMENT = os.getenv('ENVIRONMENT', 'development').lower()
+IS_PRODUCTION = ENVIRONMENT == 'production'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
+
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = os.getenv('SECRET_KEY')
+if not SECRET_KEY:
+    if IS_PRODUCTION and not IS_TESTING:
+        raise ImproperlyConfigured('SECRET_KEY must be set in production')
+    SECRET_KEY = 'dev-only-secret-key-change-me-please-before-shipping-2026'
 
 ALLOWED_HOSTS = [
     host.strip() for host in os.getenv(
@@ -124,7 +133,22 @@ DATABASE_URL = os.getenv('DATABASE_URL')
 if DATABASE_URL:
     import dj_database_url
     DATABASES = {
-        'default': dj_database_url.parse(DATABASE_URL, conn_max_age=600, ssl_require=True)
+        'default': dj_database_url.parse(
+            DATABASE_URL,
+            conn_max_age=600,
+            ssl_require=not DEBUG,
+        )
+    }
+elif os.getenv('DB_ENGINE'):
+    DATABASES = {
+        'default': {
+            'ENGINE': os.getenv('DB_ENGINE', 'django.db.backends.postgresql'),
+            'NAME': os.getenv('DB_NAME', 'bko_station'),
+            'USER': os.getenv('DB_USER', 'postgres'),
+            'PASSWORD': os.getenv('DB_PASSWORD', ''),
+            'HOST': os.getenv('DB_HOST', 'localhost'),
+            'PORT': os.getenv('DB_PORT', '5432'),
+        }
     }
 else:
     DATABASES = {
@@ -209,17 +233,32 @@ SIMPLE_JWT = {
 }
 
 # Cache settings
-CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-        'LOCATION': 'bko-station-cache',
-        'TIMEOUT': 300,
-        'OPTIONS': {
-            'MAX_ENTRIES': 1000,
-            'CULL_FREQUENCY': 3,
+REDIS_URL = os.getenv('REDIS_URL')
+CACHE_BACKEND = os.getenv('CACHE_BACKEND')
+CACHE_LOCATION = os.getenv('CACHE_LOCATION')
+if REDIS_URL or (CACHE_BACKEND and CACHE_LOCATION):
+    CACHES = {
+        'default': {
+            'BACKEND': CACHE_BACKEND or 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': CACHE_LOCATION or REDIS_URL,
+            'TIMEOUT': 300,
+            'OPTIONS': {
+                'IGNORE_EXCEPTIONS': True,
+            },
         }
     }
-}
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'bko-station-cache',
+            'TIMEOUT': 300,
+            'OPTIONS': {
+                'MAX_ENTRIES': 1000,
+                'CULL_FREQUENCY': 3,
+            }
+        }
+    }
 
 # Logging configuration
 LOGGING = {
@@ -270,19 +309,29 @@ LOGGING = {
 }
 
 # Security flags (Render/production)
-IS_TESTING = 'test' in sys.argv
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SECURE_SSL_REDIRECT = os.getenv(
     'SECURE_SSL_REDIRECT',
-    'True' if not DEBUG and not IS_TESTING else 'False'
+    'True' if IS_PRODUCTION and not IS_TESTING else 'False'
 ).lower() == 'true'
 SESSION_COOKIE_SECURE = os.getenv(
     'SESSION_COOKIE_SECURE',
-    'True' if not DEBUG and not IS_TESTING else 'False'
+    'True' if IS_PRODUCTION and not IS_TESTING else 'False'
 ).lower() == 'true'
 CSRF_COOKIE_SECURE = os.getenv(
     'CSRF_COOKIE_SECURE',
-    'True' if not DEBUG and not IS_TESTING else 'False'
+    'True' if IS_PRODUCTION and not IS_TESTING else 'False'
+).lower() == 'true'
+SECURE_HSTS_SECONDS = int(
+    os.getenv('SECURE_HSTS_SECONDS', '31536000' if IS_PRODUCTION and not IS_TESTING else '0')
+)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = os.getenv(
+    'SECURE_HSTS_INCLUDE_SUBDOMAINS',
+    'True' if SECURE_HSTS_SECONDS > 0 else 'False'
+).lower() == 'true'
+SECURE_HSTS_PRELOAD = os.getenv(
+    'SECURE_HSTS_PRELOAD',
+    'True' if SECURE_HSTS_SECONDS > 0 else 'False'
 ).lower() == 'true'
 
 # Default primary key field type

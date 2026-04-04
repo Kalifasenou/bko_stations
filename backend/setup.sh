@@ -54,7 +54,7 @@ if [ "$ENVIRONMENT" = "dev" ]; then
     read -p "Charger les données de test? (y/n) " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        python manage.py seed_stations
+        python seed_stations.py
     fi
 fi
 

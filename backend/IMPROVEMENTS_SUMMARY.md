@@ -180,7 +180,7 @@ python manage.py test
 - [ ] Configurer les variables d'environnement
 - [ ] Exécuter les migrations: `python manage.py migrate`
 - [ ] Créer un superutilisateur: `python manage.py createsuperuser`
-- [ ] Charger les données: `python manage.py seed_stations`
+- [ ] Charger les données: `python seed_stations.py`
 - [ ] Exécuter les tests: `python manage.py test`
 - [ ] Configurer le cache (Redis pour production)
 - [ ] Configurer les logs

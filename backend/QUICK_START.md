@@ -131,7 +131,7 @@ python manage.py runserver 8001
 ```bash
 python manage.py flush
 python manage.py migrate
-python manage.py seed_stations
+python seed_stations.py
 ```
 
 ---
@@ -175,7 +175,7 @@ python manage.py createsuperuser
 ## 📦 Charger les Données de Test
 
 ```bash
-python manage.py seed_stations
+python seed_stations.py
 ```
 
 ---
