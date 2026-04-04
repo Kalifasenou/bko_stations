@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase, APIClient
 from rest_framework import status
 
-from .models import Station, Signalement
+from .models import Station, Signalement, ZoneElectrique, ElectriciteSignalement
 
 
 class StationModelTests(TestCase):
@@ -378,6 +378,46 @@ class SignalementAPITests(APITestCase):
         latest = Signalement.objects.filter(station=self.station, fuel_type='Essence').order_by('-timestamp').first()
         self.assertEqual(latest.status, 'Épuisé')
         self.assertEqual(latest.approval_count, 1)
+
+
+class ElectricityZoneAPITests(APITestCase):
+    """Tests des endpoints zones électriques"""
+
+    def setUp(self):
+        self.client = APIClient()
+        User = get_user_model()
+        self.user = User.objects.create_user(username='elecuser', password='StrongPass123!')
+        self.zone = ZoneElectrique.objects.create(
+            name='Badalabougou',
+            zone_type='Quartier',
+            latitude=12.6500,
+            longitude=-7.9850,
+            radius_km=2.0,
+        )
+        ElectriciteSignalement.objects.create(zone=self.zone, status='Disponible')
+
+    def test_list_zones(self):
+        response = self.client.get('/api/zones-electriques/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_electricity_by_location(self):
+        response = self.client.get('/api/electricity/by-location/?lat=12.6499&lon=-7.9851')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('zone', response.data)
+
+    def test_create_electricity_signalement_authenticated(self):
+        token_response = self.client.post('/api/auth/token/', {
+            'username': 'elecuser',
+            'password': 'StrongPass123!'
+        }, format='json')
+        access = token_response.data['access']
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {access}')
+
+        response = self.client.post('/api/electricite-signalements/', {
+            'zone': self.zone.id,
+            'status': 'Instable'
+        }, format='json')
+        self.assertIn(response.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
 
 
 class StatisticsAPITests(APITestCase):

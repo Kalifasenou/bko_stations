@@ -1,15 +1,29 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
-    StationViewSet, SignalementViewSet, statistics, search_stations,
-    stations_by_status, statistics_by_brand, fuel_availability_map,
-    signalements_heatmap, health_check, monitoring_overview,
-    brands_list, stations_nearby, register_user
+    StationViewSet,
+    SignalementViewSet,
+    ZoneElectriqueViewSet,
+    ElectriciteSignalementViewSet,
+    statistics,
+    search_stations,
+    stations_by_status,
+    statistics_by_brand,
+    fuel_availability_map,
+    signalements_heatmap,
+    health_check,
+    monitoring_overview,
+    brands_list,
+    stations_nearby,
+    electricity_by_location,
+    register_user,
 )
 
 router = DefaultRouter()
 router.register(r'stations', StationViewSet, basename='station')
 router.register(r'signalements', SignalementViewSet, basename='signalement')
+router.register(r'zones-electriques', ZoneElectriqueViewSet, basename='zone-electrique')
+router.register(r'electricite-signalements', ElectriciteSignalementViewSet, basename='electricite-signalement')
 
 urlpatterns = [
     # Auth endpoint
@@ -27,7 +41,9 @@ urlpatterns = [
     path('stations/by-status/', stations_by_status, name='stations-by-status'),
     # Map endpoints
     path('fuel-availability-map/', fuel_availability_map, name='fuel-availability-map'),
+    path('electricity/by-location/', electricity_by_location, name='electricity-by-location'),
     path('signalements/heatmap/', signalements_heatmap, name='signalements-heatmap'),
     path('monitoring/', monitoring_overview, name='monitoring-overview'),
+    path('healthz/', health_check, name='healthz'),
     path('', include(router.urls)),
 ]

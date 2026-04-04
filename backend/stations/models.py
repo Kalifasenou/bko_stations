@@ -4,6 +4,48 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from datetime import timedelta
 
 
+class ZoneElectrique(models.Model):
+    """Zone géographique pour le suivi de l'électricité"""
+    ZONE_TYPES = [
+        ('Quartier', 'Quartier'),
+        ('Secteur', 'Secteur'),
+        ('Zone', 'Zone'),
+    ]
+
+    name = models.CharField(max_length=120, unique=True, verbose_name="Nom de la zone")
+    zone_type = models.CharField(max_length=20, choices=ZONE_TYPES, default='Quartier', verbose_name="Type de zone")
+    latitude = models.FloatField(
+        verbose_name="Latitude",
+        validators=[MinValueValidator(-90), MaxValueValidator(90)]
+    )
+    longitude = models.FloatField(
+        verbose_name="Longitude",
+        validators=[MinValueValidator(-180), MaxValueValidator(180)]
+    )
+    radius_km = models.FloatField(default=2.5, validators=[MinValueValidator(0.1)], verbose_name="Rayon (km)")
+    is_active = models.BooleanField(default=True, verbose_name="Active")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Zone électrique"
+        verbose_name_plural = "Zones électriques"
+        ordering = ['name']
+        indexes = [
+            models.Index(fields=['zone_type']),
+            models.Index(fields=['is_active']),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.zone_type})"
+
+    def get_latest_signalement(self):
+        """Retourne le dernier signalement non expiré (moins de 4h)"""
+        return self.signalements_electricite.filter(
+            timestamp__gte=timezone.now() - timedelta(hours=4)
+        ).order_by('-timestamp').first()
+
+
 class Station(models.Model):
     """Station de carburant à Bamako"""
     name = models.CharField(max_length=100, verbose_name="Nom de la station")
@@ -69,9 +111,8 @@ class Station(models.Model):
         """Retourne la couleur selon le statut global de la station."""
         essence = self.get_latest_signalement_for_fuel('Essence')
         gazole = self.get_latest_signalement_for_fuel('Gazole')
-        electricite = self.get_latest_signalement_for_fuel('Électricité')
 
-        signals = [s for s in (essence, gazole, electricite) if s]
+        signals = [s for s in (essence, gazole) if s]
         if not signals:
             return 'gray'
 
@@ -93,11 +134,10 @@ class Station(models.Model):
 
 
 class Signalement(models.Model):
-    """Signalement de disponibilité de carburant"""
+    """Signalement de disponibilité de carburant (stations uniquement)"""
     FUEL_TYPES = [
         ('Essence', 'Essence'),
         ('Gazole', 'Gazole'),
-        ('Électricité', 'Électricité'),
     ]
     STATUS_CHOICES = [
         ('Disponible', 'Disponible'),
@@ -112,7 +152,6 @@ class Signalement(models.Model):
     )
     fuel_type = models.CharField(max_length=20, choices=FUEL_TYPES, verbose_name="Type de carburant")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, verbose_name="Statut")
-    # Use default=timezone.now so tests can override, but still auto-populate in practice
     timestamp = models.DateTimeField(default=timezone.now, verbose_name="Date du signalement")
     approval_count = models.IntegerField(default=1, verbose_name="Nombre d'approbations")
     ip = models.GenericIPAddressField(null=True, blank=True, verbose_name="Adresse IP")
@@ -124,8 +163,8 @@ class Signalement(models.Model):
     )
 
     class Meta:
-        verbose_name = "Signalement"
-        verbose_name_plural = "Signalements"
+        verbose_name = "Signalement carburant"
+        verbose_name_plural = "Signalements carburant"
         ordering = ['-timestamp']
         indexes = [
             models.Index(fields=['station', 'timestamp']),
@@ -140,3 +179,41 @@ class Signalement(models.Model):
 
     def __str__(self):
         return f"{self.station.name} - {self.fuel_type}: {self.status} ({self.approval_count} confirmations)"
+
+
+class ElectriciteSignalement(models.Model):
+    """Signalement d'état électrique pour une zone géographique"""
+    STATUS_CHOICES = [
+        ('Disponible', 'Disponible'),
+        ('Épuisé', 'Épuisé'),
+        ('Instable', 'Instable'),
+    ]
+
+    zone = models.ForeignKey(
+        ZoneElectrique,
+        on_delete=models.CASCADE,
+        related_name='signalements_electricite',
+        verbose_name="Zone"
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, verbose_name="Statut électricité")
+    timestamp = models.DateTimeField(default=timezone.now, verbose_name="Date du signalement")
+    approval_count = models.IntegerField(default=1, verbose_name="Nombre d'approbations")
+    ip = models.GenericIPAddressField(null=True, blank=True, verbose_name="Adresse IP")
+    comment = models.CharField(max_length=255, blank=True, default='', verbose_name="Commentaire")
+
+    class Meta:
+        verbose_name = "Signalement électricité"
+        verbose_name_plural = "Signalements électricité"
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['zone', 'timestamp']),
+            models.Index(fields=['status']),
+            models.Index(fields=['timestamp']),
+            models.Index(fields=['ip']),
+        ]
+
+    def is_expired(self):
+        return timezone.now() - self.timestamp > timedelta(hours=4)
+
+    def __str__(self):
+        return f"{self.zone.name} - Électricité: {self.status} ({self.approval_count} confirmations)"

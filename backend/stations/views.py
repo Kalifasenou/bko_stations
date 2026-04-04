@@ -14,12 +14,20 @@ from django.core.exceptions import ValidationError
 from django.core.cache import cache
 from django.contrib.auth import get_user_model
 from rest_framework_simplejwt.tokens import RefreshToken
-import math
 import logging
 
-from .models import Station, Signalement
-from .serializers import StationSerializer, SignalementSerializer
-from .utils import get_user_ip, validate_coordinates as utils_validate_coordinates
+from .models import Station, Signalement, ZoneElectrique, ElectriciteSignalement
+from .serializers import (
+    StationSerializer,
+    SignalementSerializer,
+    ZoneElectriqueSerializer,
+    ElectriciteSignalementSerializer,
+)
+from .utils import (
+    calculate_distance,
+    get_user_ip,
+    validate_coordinates as utils_validate_coordinates,
+)
 from .permissions import IsAdminOrReadOnly
 
 logger = logging.getLogger(__name__)
@@ -47,21 +55,6 @@ class StandardResultsSetPagination(PageNumberPagination):
     page_size = 20
     page_size_query_param = 'page_size'
     max_page_size = 100
-
-
-def calculate_distance(lat1, lon1, lat2, lon2):
-    """Calcule la distance en km entre deux points GPS (formule de Haversine)"""
-    R = 6371  # Rayon de la Terre en km
-    
-    lat1_rad = math.radians(lat1)
-    lat2_rad = math.radians(lat2)
-    delta_lat = math.radians(lat2 - lat1)
-    delta_lon = math.radians(lon2 - lon1)
-    
-    a = math.sin(delta_lat/2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(delta_lon/2)**2
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
-    
-    return R * c
 
 
 class StationViewSet(viewsets.ModelViewSet):
@@ -172,7 +165,13 @@ class SignalementViewSet(viewsets.ModelViewSet):
         
         if not station_id:
             return Response(
-                {"error": "Le champ 'station' est requis"}, 
+                {"error": "Le champ 'station' est requis"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if fuel_type not in ['Essence', 'Gazole']:
+            return Response(
+                {"error": "Seuls Essence et Gazole sont autorisés pour les stations"},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
@@ -233,7 +232,8 @@ class SignalementViewSet(viewsets.ModelViewSet):
         limit = max(1, min(limit, 50))
 
         signalements = Signalement.objects.filter(
-            timestamp__gte=timezone.now() - timedelta(hours=4)
+            timestamp__gte=timezone.now() - timedelta(hours=4),
+            fuel_type__in=['Essence', 'Gazole']
         ).order_by('-timestamp')[:limit]
         
         serializer = self.get_serializer(signalements, many=True)
@@ -298,11 +298,154 @@ class SignalementViewSet(viewsets.ModelViewSet):
 
         signalements = Signalement.objects.filter(
             station_id=station_id,
+            fuel_type__in=['Essence', 'Gazole'],
             timestamp__gte=timezone.now() - timedelta(hours=4)
         ).order_by('-timestamp')[:limit]
         
         serializer = self.get_serializer(signalements, many=True)
         return Response(serializer.data)
+
+
+class ZoneElectriqueViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet lecture seule pour les zones électriques"""
+    queryset = ZoneElectrique.objects.filter(is_active=True)
+    serializer_class = ZoneElectriqueSerializer
+    permission_classes = [AllowAny]
+
+
+class ElectriciteSignalementViewSet(viewsets.ModelViewSet):
+    """ViewSet pour les signalements électricité par zone"""
+    queryset = ElectriciteSignalement.objects.all()
+    serializer_class = ElectriciteSignalementSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+    throttle_classes = [SignalementAnonRateThrottle, SignalementUserRateThrottle]
+
+    def create(self, request, *args, **kwargs):
+        ip = get_user_ip(request)
+        zone_id = request.data.get('zone')
+        new_status = request.data.get('status')
+
+        if not zone_id:
+            return Response(
+                {"error": "Le champ 'zone' est requis"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if new_status not in ['Disponible', 'Épuisé', 'Instable']:
+            return Response(
+                {"error": "Le statut électricité doit être Disponible, Épuisé ou Instable"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        one_hour_ago = timezone.now() - timedelta(hours=1)
+        existing_vote = ElectriciteSignalement.objects.filter(
+            zone_id=zone_id,
+            ip=ip,
+            timestamp__gte=one_hour_ago
+        ).first()
+
+        if existing_vote:
+            return Response(
+                {"error": "Vous avez déjà signalé cette zone dans l'heure. Réessayez plus tard."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        four_hours_ago = timezone.now() - timedelta(hours=4)
+        existing_signalement = ElectriciteSignalement.objects.filter(
+            zone_id=zone_id,
+            timestamp__gte=four_hours_ago
+        ).order_by('-timestamp').first()
+
+        if existing_signalement and existing_signalement.status == new_status:
+            existing_signalement.approval_count = F('approval_count') + 1
+            existing_signalement.timestamp = timezone.now()
+            existing_signalement.save(update_fields=['approval_count', 'timestamp'])
+            existing_signalement.refresh_from_db()
+            serializer = self.get_serializer(existing_signalement)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        data = request.data.copy()
+        data['ip'] = ip
+        serializer = self.get_serializer(data=data)
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['get'])
+    def latest(self, request):
+        try:
+            limit = int(request.query_params.get('limit', 10))
+        except ValueError:
+            return Response(
+                {"error": "Le paramètre 'limit' doit être un nombre entier"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        limit = max(1, min(limit, 50))
+        signalements = ElectriciteSignalement.objects.filter(
+            timestamp__gte=timezone.now() - timedelta(hours=4)
+        ).order_by('-timestamp')[:limit]
+
+        serializer = self.get_serializer(signalements, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def by_zone(self, request):
+        zone_id = request.query_params.get('zone_id')
+        if not zone_id:
+            return Response(
+                {"error": "Le paramètre 'zone_id' est requis"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        signalements = ElectriciteSignalement.objects.filter(
+            zone_id=zone_id,
+            timestamp__gte=timezone.now() - timedelta(hours=4)
+        ).order_by('-timestamp')[:50]
+
+        serializer = self.get_serializer(signalements, many=True)
+        return Response(serializer.data)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def electricity_by_location(request):
+    """Retourne la zone électrique la plus proche d'un point GPS"""
+    lat = request.query_params.get('lat')
+    lon = request.query_params.get('lon')
+
+    if not lat or not lon:
+        return Response(
+            {"error": "Les paramètres 'lat' et 'lon' sont requis"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        lat, lon = utils_validate_coordinates(lat, lon)
+    except ValidationError as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    zones = ZoneElectrique.objects.filter(is_active=True)
+    if not zones.exists():
+        return Response({"zone": None, "signalement": None})
+
+    nearest_zone = None
+    min_distance = None
+    for zone in zones:
+        distance = calculate_distance(lat, lon, zone.latitude, zone.longitude)
+        if min_distance is None or distance < min_distance:
+            min_distance = distance
+            nearest_zone = zone
+
+    latest = nearest_zone.get_latest_signalement() if nearest_zone else None
+    return Response({
+        'zone': ZoneElectriqueSerializer(nearest_zone).data if nearest_zone else None,
+        'distance_km': round(min_distance, 2) if min_distance is not None else None,
+        'signalement': ElectriciteSignalementSerializer(latest).data if latest else None,
+    })
 
 
 # ============================================
@@ -323,12 +466,16 @@ def statistics(request):
         total_stations = Station.objects.filter(is_active=True).count()
         
         # Signalements actifs (non expirés)
-        active_signalements = Signalement.objects.filter(timestamp__gte=four_hours_ago)
+        active_signalements = Signalement.objects.filter(
+            timestamp__gte=four_hours_ago,
+            fuel_type__in=['Essence', 'Gazole']
+        )
         
         # Stations avec carburant disponible (au moins un carburant disponible)
         stations_with_fuel = Station.objects.filter(
             is_active=True,
             signalements__timestamp__gte=four_hours_ago,
+            signalements__fuel_type__in=['Essence', 'Gazole'],
             signalements__status='Disponible'
         ).distinct().count()
         
@@ -337,14 +484,19 @@ def statistics(request):
         stations_empty = Station.objects.filter(
             is_active=True,
             signalements__timestamp__gte=four_hours_ago,
+            signalements__fuel_type__in=['Essence', 'Gazole'],
             signalements__status='Épuisé'
         ).exclude(
             signalements__timestamp__gte=four_hours_ago,
+            signalements__fuel_type__in=['Essence', 'Gazole'],
             signalements__status='Disponible'
         ).distinct().count()
         
         # Signalements des dernières 24h
-        signalements_24h = Signalement.objects.filter(timestamp__gte=twenty_four_hours_ago).count()
+        signalements_24h = Signalement.objects.filter(
+            timestamp__gte=twenty_four_hours_ago,
+            fuel_type__in=['Essence', 'Gazole']
+        ).count()
         
         # Signalements par type de carburant
         essence_disponible = Signalement.objects.filter(
@@ -359,10 +511,14 @@ def statistics(request):
             status='Disponible'
         ).count()
 
-        electricite_disponible = Signalement.objects.filter(
+        electricite_disponible = ElectriciteSignalement.objects.filter(
             timestamp__gte=four_hours_ago,
-            fuel_type='Électricité',
             status='Disponible'
+        ).count()
+
+        electricite_instable = ElectriciteSignalement.objects.filter(
+            timestamp__gte=four_hours_ago,
+            status='Instable'
         ).count()
         
         # Top stations avec le plus de signalements
@@ -380,7 +536,10 @@ def statistics(request):
             'fuel_availability': {
                 'essence_disponible': essence_disponible,
                 'gazole_disponible': gazole_disponible,
-                'electricite_disponible': electricite_disponible,
+            },
+            'electricity_availability': {
+                'zones_disponibles': electricite_disponible,
+                'zones_instables': electricite_instable,
             },
             'top_stations': [
                 {'id': s.id, 'name': s.name, 'brand': s.brand, 'count': s.signalement_count}
@@ -446,15 +605,18 @@ def stations_by_status(request):
             # Stations avec au moins un carburant disponible
             stations = stations.filter(
                 signalements__timestamp__gte=four_hours_ago,
+                signalements__fuel_type__in=['Essence', 'Gazole'],
                 signalements__status='Disponible'
             ).distinct()
         elif status_filter == 'empty':
             # Stations où tous les carburants sont épuisés
             stations = stations.filter(
                 signalements__timestamp__gte=four_hours_ago,
+                signalements__fuel_type__in=['Essence', 'Gazole'],
                 signalements__status='Épuisé'
             ).exclude(
                 signalements__timestamp__gte=four_hours_ago,
+                signalements__fuel_type__in=['Essence', 'Gazole'],
                 signalements__status='Disponible'
             ).distinct()
         elif status_filter == 'unknown':
@@ -490,14 +652,17 @@ def statistics_by_brand(request):
             
             available = brand_stations.filter(
                 signalements__timestamp__gte=four_hours_ago,
+                signalements__fuel_type__in=['Essence', 'Gazole'],
                 signalements__status='Disponible'
             ).distinct().count()
-            
+
             empty = brand_stations.filter(
                 signalements__timestamp__gte=four_hours_ago,
+                signalements__fuel_type__in=['Essence', 'Gazole'],
                 signalements__status='Épuisé'
             ).exclude(
                 signalements__timestamp__gte=four_hours_ago,
+                signalements__fuel_type__in=['Essence', 'Gazole'],
                 signalements__status='Disponible'
             ).distinct().count()
             
@@ -527,8 +692,13 @@ def fuel_availability_map(request):
         four_hours_ago = timezone.now() - timedelta(hours=4)
         
         stations = Station.objects.filter(is_active=True).prefetch_related(
-            Prefetch('signalements',
-                     queryset=Signalement.objects.filter(timestamp__gte=four_hours_ago))
+            Prefetch(
+                'signalements',
+                queryset=Signalement.objects.filter(
+                    timestamp__gte=four_hours_ago,
+                    fuel_type__in=['Essence', 'Gazole']
+                )
+            )
         )
         
         data = []
@@ -657,7 +827,8 @@ def signalements_heatmap(request):
         time_threshold = timezone.now() - timedelta(hours=hours)
         
         signalements = Signalement.objects.filter(
-            timestamp__gte=time_threshold
+            timestamp__gte=time_threshold,
+            fuel_type__in=['Essence', 'Gazole']
         ).values('station__latitude', 'station__longitude', 'status').annotate(
             count=Count('id')
         )
@@ -731,7 +902,8 @@ def health_check(request):
         # Get some basic stats
         total_stations = Station.objects.filter(is_active=True).count()
         recent_signalements = Signalement.objects.filter(
-            timestamp__gte=timezone.now() - timedelta(hours=4)
+            timestamp__gte=timezone.now() - timedelta(hours=4),
+            fuel_type__in=['Essence', 'Gazole']
         ).count()
         
         return Response({

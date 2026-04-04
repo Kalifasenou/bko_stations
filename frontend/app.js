@@ -27,6 +27,7 @@ const state = {
     lastUpdate: null,
     authToken: null,
     currentUser: null,
+    electricityByStation: {},
     pagination: {
         page: 1,
         hasMore: true,
@@ -298,7 +299,7 @@ function selectStation(station) {
     }
 
     // Update additional situations
-    updateAdditionalSituations(station);
+    void updateAdditionalSituations(station);
     
     // Update fuel cards with BOTH fuel types
     updateFuelCards(station);
@@ -342,20 +343,40 @@ function updateFuelCards(station) {
     }
 }
 
-function updateAdditionalSituations(station) {
+async function updateAdditionalSituations(station) {
     const gazoleData = station.gazole_signalement;
-    const electricityData = station.electricity_signalement;
-
-    if (electricityData) {
-        elements.electricityStatus.textContent = `${electricityData.status} (${electricityData.time_ago})`;
-    } else {
-        elements.electricityStatus.textContent = 'Non signalé';
-    }
 
     if (gazoleData) {
         elements.gasoilSituation.textContent = `${gazoleData.status} (${gazoleData.time_ago})`;
     } else {
         elements.gasoilSituation.textContent = 'Non signalé';
+    }
+
+    const cacheKey = `${station.id}:${station.latitude}:${station.longitude}`;
+    let electricityData = state.electricityByStation[cacheKey];
+
+    if (!electricityData) {
+        try {
+            const url = new URL(`${CONFIG.API_BASE_URL}/electricity/by-location/`);
+            url.searchParams.append('lat', station.latitude);
+            url.searchParams.append('lon', station.longitude);
+            const response = await fetch(url);
+            if (response.ok) {
+                electricityData = await response.json();
+                state.electricityByStation[cacheKey] = electricityData;
+            }
+        } catch (error) {
+            console.error('Erreur chargement électricité par zone:', error);
+        }
+    }
+
+    if (electricityData?.signalement?.status) {
+        const status = electricityData.signalement.status;
+        const zoneName = electricityData.zone?.name ? ` - ${electricityData.zone.name}` : '';
+        const timeAgo = electricityData.signalement.time_ago ? ` (${electricityData.signalement.time_ago})` : '';
+        elements.electricityStatus.textContent = `${status}${zoneName}${timeAgo}`;
+    } else {
+        elements.electricityStatus.textContent = 'Non signalé';
     }
 }
 
@@ -763,11 +784,11 @@ function showFuelTypeSelector(status) {
                 <button class="fuel-type-btn" data-fuel="Gazole">
                     🚛 Gazole
                 </button>
-                <button class="fuel-type-btn" data-fuel="Électricité">
-                    ⚡ Électricité
-                </button>
                 <button class="fuel-type-btn" data-fuel="all">
-                    ⛽ + 🚛 + ⚡ Les trois
+                    ⛽ + 🚛 Les deux
+                </button>
+                <button class="fuel-type-btn" data-fuel="ElectriciteZone">
+                    ⚡ Électricité (zone)
                 </button>
             </div>
             <textarea id="signalement-comment" class="form-input" rows="3" maxlength="255" placeholder="Commentaire (optionnel)"></textarea>
@@ -792,11 +813,61 @@ function showFuelTypeSelector(status) {
     modal.style.display = 'flex';
 }
 
+async function reportElectricityByZone(status, comment = '') {
+    if (!state.selectedStation) return;
+    if (!requireAuth('signaler l\'électricité')) return;
+
+    try {
+        const lookupUrl = new URL(`${CONFIG.API_BASE_URL}/electricity/by-location/`);
+        lookupUrl.searchParams.append('lat', state.selectedStation.latitude);
+        lookupUrl.searchParams.append('lon', state.selectedStation.longitude);
+        const lookupResponse = await fetch(lookupUrl);
+        if (!lookupResponse.ok) {
+            throw new Error('Impossible de trouver la zone électrique');
+        }
+
+        const lookupData = await lookupResponse.json();
+        const zoneId = lookupData?.zone?.id;
+        if (!zoneId) {
+            throw new Error('Aucune zone électrique disponible à proximité');
+        }
+
+        const response = await fetch(`${CONFIG.API_BASE_URL}/electricite-signalements/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getAuthHeaders(),
+            },
+            body: JSON.stringify({
+                zone: zoneId,
+                status,
+                comment,
+            }),
+        });
+
+        const payload = await response.json();
+        if (!response.ok) {
+            throw new Error(payload.error || 'Erreur signalement électricité');
+        }
+
+        showToast('Signalement électricité enregistré', 'success');
+        state.electricityByStation = {};
+        await updateAdditionalSituations(state.selectedStation);
+    } catch (error) {
+        console.error('Error reporting electricity:', error);
+        showToast(error.message, 'error');
+    }
+}
+
 async function submitSignalement(fuelType, status, comment = '') {
     if (fuelType === 'all') {
         await reportAvailability('Essence', status, comment);
         await reportAvailability('Gazole', status, comment);
-        await reportAvailability('Électricité', status, comment);
+        return;
+    }
+
+    if (fuelType === 'ElectriciteZone') {
+        await reportElectricityByZone(status, comment);
         return;
     }
 

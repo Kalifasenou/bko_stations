@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Station, Signalement
+from .models import Station, Signalement, ZoneElectrique, ElectriciteSignalement
 
 
 @admin.register(Station)
@@ -49,6 +49,26 @@ class SignalementInline(admin.TabularInline):
     
     def has_add_permission(self, request, obj=None):
         return False
+
+
+@admin.register(ZoneElectrique)
+class ZoneElectriqueAdmin(admin.ModelAdmin):
+    list_display = ['name', 'zone_type', 'latitude', 'longitude', 'radius_km', 'is_active']
+    list_filter = ['zone_type', 'is_active']
+    search_fields = ['name']
+    ordering = ['name']
+
+
+@admin.register(ElectriciteSignalement)
+class ElectriciteSignalementAdmin(admin.ModelAdmin):
+    list_display = ['zone', 'status', 'timestamp', 'approval_count', 'is_expired', 'ip']
+    list_filter = ['status', 'timestamp', 'zone__zone_type']
+    search_fields = ['zone__name', 'ip', 'comment']
+    readonly_fields = ['timestamp', 'approval_count', 'ip', 'is_expired', 'comment']
+    ordering = ['-timestamp']
+
+    def is_expired(self, obj):
+        return obj.is_expired()
 
 
 @admin.register(Signalement)

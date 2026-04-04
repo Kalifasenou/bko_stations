@@ -2,17 +2,23 @@
 Constantes pour l'application BKO Station
 """
 
-# Types de carburant
+# Types de carburant (stations)
 FUEL_TYPES = {
     'ESSENCE': 'Essence',
     'GAZOLE': 'Gazole',
-    'ELECTRICITE': 'Électricité',
 }
 
 # Statuts de carburant
 FUEL_STATUS = {
     'AVAILABLE': 'Disponible',
     'EMPTY': 'Épuisé',
+}
+
+# Statuts électricité (zones)
+ELECTRICITY_STATUS = {
+    'AVAILABLE': 'Disponible',
+    'EMPTY': 'Épuisé',
+    'UNSTABLE': 'Instable',
 }
 
 # Couleurs de station
