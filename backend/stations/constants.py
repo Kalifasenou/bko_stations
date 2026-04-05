@@ -17,8 +17,22 @@ FUEL_STATUS = {
 # Statuts électricité (zones)
 ELECTRICITY_STATUS = {
     'AVAILABLE': 'Disponible',
-    'EMPTY': 'Épuisé',
+    'OUTAGE': 'Coupure',
+    'EMPTY_COMPAT': 'Épuisé',
     'UNSTABLE': 'Instable',
+    'RETURN_RECENT': 'Retour récent',
+}
+
+ELECTRICITY_LOAD_LEVELS = {
+    'LOW': 'Faible',
+    'NORMAL': 'Normal',
+    'HIGH': 'Fort',
+}
+
+ELECTRICITY_SOURCES = {
+    'HOUSEHOLD': 'Ménage',
+    'BUSINESS': 'Commerçant',
+    'OBSERVER': 'Observateur',
 }
 
 # Couleurs de station

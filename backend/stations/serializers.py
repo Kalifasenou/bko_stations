@@ -76,20 +76,26 @@ class SignalementSerializer(serializers.ModelSerializer):
 class ZoneElectriqueSerializer(serializers.ModelSerializer):
     """Sérialiseur des zones électriques"""
     latest_signalement = serializers.SerializerMethodField()
+    reliability_score = serializers.SerializerMethodField()
+    electricity_status_color = serializers.ReadOnlyField()
 
     class Meta:
         model = ZoneElectrique
         fields = [
             'id', 'name', 'zone_type', 'latitude', 'longitude', 'radius_km',
-            'is_active', 'latest_signalement', 'created_at', 'updated_at'
+            'is_active', 'latest_signalement', 'reliability_score', 'electricity_status_color',
+            'created_at', 'updated_at'
         ]
-        read_only_fields = ['created_at', 'updated_at', 'latest_signalement']
+        read_only_fields = ['created_at', 'updated_at', 'latest_signalement', 'reliability_score', 'electricity_status_color']
 
     def get_latest_signalement(self, obj):
         latest = obj.get_latest_signalement()
         if latest:
             return ElectriciteSignalementSerializer(latest).data
         return None
+
+    def get_reliability_score(self, obj):
+        return obj.get_reliability_score()
 
 
 class ElectriciteSignalementSerializer(serializers.ModelSerializer):
@@ -103,7 +109,8 @@ class ElectriciteSignalementSerializer(serializers.ModelSerializer):
         model = ElectriciteSignalement
         fields = [
             'id', 'zone', 'zone_name', 'zone_type',
-            'status', 'timestamp', 'approval_count',
+            'status', 'load_level', 'source_type', 'duration_estimate_minutes',
+            'timestamp', 'approval_count',
             'time_ago', 'is_expired', 'comment'
         ]
         read_only_fields = ['id', 'timestamp', 'approval_count']
@@ -114,6 +121,11 @@ class ElectriciteSignalementSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 f"Le statut électricité doit être l'un des suivants: {', '.join(valid_statuses)}"
             )
+        return value
+
+    def validate_duration_estimate_minutes(self, value):
+        if value < 0 or value > 1440:
+            raise serializers.ValidationError("La durée estimée doit être entre 0 et 1440 minutes")
         return value
 
     def validate(self, attrs):

@@ -23,11 +23,28 @@ const state = {
     markers: {},
     selectedStation: null,
     userLocation: null,
-    currentView: 'map',
+    currentView: 'list',
     lastUpdate: null,
     authToken: null,
     currentUser: null,
     electricityByStation: {},
+    electricityZones: [],
+    electricityRecommendation: null,
+    electricityLastSyncAt: null,
+    electricityFilters: {
+        status: 'all',
+        radius: 10,
+        freshnessMinutes: 240,
+        sortBy: 'distance',
+    },
+    lastSyncAt: null,
+    searchFilters: {
+        query: '',
+        availableFuel: 'all',
+        radius: 10,
+        freshnessMinutes: 240,
+        sortBy: 'distance',
+    },
     pagination: {
         page: 1,
         hasMore: true,
@@ -90,30 +107,36 @@ async function initApp() {
 
         // Initialize map
         initMap();
-        
-        // Load stations
-        await loadStations();
-        
-        // Get user location
-        getUserLocation();
-        
+
         // Setup event listeners
         setupEventListeners();
-        
+
+        // Get user location first (core UX)
+        await getUserLocation();
+
+        // Load nearby stations with current filters
+        await refreshStations({ keepSelection: false, showToastOnError: true });
+
+        // Default to list view for quick decision making
+        switchView('list');
+        elements.navButtons.forEach(b => b.classList.remove('active'));
+        const listBtn = Array.from(elements.navButtons).find(b => b.dataset.view === 'list');
+        if (listBtn) listBtn.classList.add('active');
+
         // Start live pulse
         startLivePulse();
 
         // Start periodic stations refresh
         startStationsRefresh();
-        
+
         // Setup PWA
         setupPWA();
-        
+
         // Hide loading
         setTimeout(() => {
             elements.loading.classList.add('hidden');
-        }, 1000);
-        
+        }, 700);
+
     } catch (error) {
         console.error('Error initializing app:', error);
         showToast('Erreur lors du chargement de l\'application', 'error');
@@ -148,60 +171,93 @@ function initMap() {
 // ============================================
 async function loadStations() {
     if (state.pagination.loading) return;
-    
+
     state.pagination.loading = true;
-    
+
     try {
         const url = new URL(`${CONFIG.API_BASE_URL}/stations/`);
-        
-        // Add user location if available
+
         if (state.userLocation) {
             url.searchParams.append('lat', state.userLocation.lat);
             url.searchParams.append('lon', state.userLocation.lng);
-            url.searchParams.append('radius', 10);
+            url.searchParams.append('radius', String(state.searchFilters.radius));
         }
-        
-        // Add pagination params
+
+        if (state.searchFilters.availableFuel !== 'all') {
+            url.searchParams.append('available_fuel', state.searchFilters.availableFuel);
+        }
+
+        if (state.searchFilters.freshnessMinutes) {
+            url.searchParams.append('freshness_minutes', String(state.searchFilters.freshnessMinutes));
+        }
+
+        if (state.searchFilters.sortBy === 'recent') {
+            url.searchParams.append('sort_by', 'recent');
+        } else if (state.searchFilters.sortBy === 'name') {
+            url.searchParams.append('sort_by', 'name');
+        }
+
         url.searchParams.append('page', state.pagination.page);
         url.searchParams.append('page_size', 50);
-        
+
         const response = await fetch(url);
         if (!response.ok) throw new Error('Failed to load stations');
-        
+
         const data = await response.json();
-        
-        // Handle paginated response
         const newStations = data.results || data;
-        
-        // Check if there are more pages
         state.pagination.hasMore = !!(data.next);
-        
-        // Add new stations (avoid duplicates)
+
         const existingIds = new Set(state.stations.map(s => s.id));
         const uniqueStations = newStations.filter(s => !existingIds.has(s.id));
         state.stations = [...state.stations, ...uniqueStations];
-        
+        state.lastSyncAt = new Date();
+
         renderStations();
-        
     } catch (error) {
         console.error('Error loading stations:', error);
-        showToast('Erreur de chargement des stations', 'error');
+        throw error;
     } finally {
         state.pagination.loading = false;
     }
 }
 
+function getFuelBadgeText(signalement) {
+    if (!signalement) return 'Inconnu';
+    return `${signalement.status} • ${signalement.time_ago}`;
+}
+
+function getFuelClass(signalement) {
+    if (!signalement) return 'unknown';
+    return signalement.status === 'Disponible' ? 'available' : 'empty';
+}
+
+function applyClientSearchFilter(stations) {
+    const query = (state.searchFilters.query || '').trim().toLowerCase();
+    if (!query) return stations;
+
+    return stations.filter(station =>
+        station.name.toLowerCase().includes(query) ||
+        station.brand.toLowerCase().includes(query)
+    );
+}
+
 function renderStations() {
-    // Clear existing markers
+    const filteredStations = applyClientSearchFilter(state.stations);
+
     Object.values(state.markers).forEach(marker => state.map.removeLayer(marker));
     state.markers = {};
-    
-    // Add markers for each station
-    state.stations.forEach(station => {
+
+    filteredStations.forEach(station => {
         const marker = createStationMarker(station);
         state.markers[station.id] = marker;
         marker.addTo(state.map);
     });
+
+    if (state.currentView === 'list') {
+        renderStationList(filteredStations);
+    }
+
+    updateSyncIndicator();
 }
 
 function createStationMarker(station) {
@@ -558,35 +614,35 @@ async function register(username, password) {
 // ============================================
 // USER LOCATION
 // ============================================
-function getUserLocation() {
+let userMarker = null;
+
+async function getUserLocation() {
     if (!navigator.geolocation) {
         console.log('Geolocation not supported');
-        return;
+        showToast('Géolocalisation non supportée', 'error');
+        return false;
     }
-    
-    navigator.geolocation.getCurrentPosition(
-        (position) => {
-            state.userLocation = {
-                lat: position.coords.latitude,
-                lng: position.coords.longitude,
-            };
-            
-            // Add user marker
-            addUserMarker(state.userLocation);
-            
-            // Center map on user
-            state.map.setView([state.userLocation.lat, state.userLocation.lng], 14);
-            
-            // Reload stations with location
-            state.pagination.page = 1;
-            state.stations = [];
-            loadStations();
-        },
-        (error) => {
-            console.log('Geolocation error:', error);
-        },
-        { enableHighAccuracy: true, timeout: 10000 }
-    );
+
+    return new Promise((resolve) => {
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                state.userLocation = {
+                    lat: position.coords.latitude,
+                    lng: position.coords.longitude,
+                };
+
+                addUserMarker(state.userLocation);
+                state.map.setView([state.userLocation.lat, state.userLocation.lng], 14);
+                resolve(true);
+            },
+            (error) => {
+                console.log('Geolocation error:', error);
+                showToast('Position non détectée. Affichage global activé.', 'error');
+                resolve(false);
+            },
+            { enableHighAccuracy: true, timeout: 10000 }
+        );
+    });
 }
 
 function addUserMarker(location) {
@@ -595,8 +651,49 @@ function addUserMarker(location) {
         iconSize: [20, 20],
         iconAnchor: [10, 10],
     });
-    
-    L.marker([location.lat, location.lng], { icon }).addTo(state.map);
+
+    if (userMarker) {
+        state.map.removeLayer(userMarker);
+    }
+
+    userMarker = L.marker([location.lat, location.lng], { icon }).addTo(state.map);
+}
+
+async function refreshStations({ keepSelection = true, showToastOnError = false } = {}) {
+    const selectedStationId = keepSelection ? state.selectedStation?.id : null;
+
+    state.pagination.page = 1;
+    state.stations = [];
+
+    try {
+        await loadStations();
+
+        if (selectedStationId) {
+            const refreshedStation = state.stations.find(s => s.id === selectedStationId);
+            if (refreshedStation) {
+                selectStation(refreshedStation);
+            }
+        }
+    } catch (error) {
+        if (showToastOnError) {
+            showToast('Erreur de chargement des stations', 'error');
+        }
+    }
+}
+
+function updateSyncIndicator() {
+    const syncEl = document.getElementById('sync-info');
+    if (!syncEl) return;
+
+    if (!state.lastSyncAt) {
+        syncEl.textContent = 'Synchronisation en attente';
+        return;
+    }
+
+    const minutesAgo = Math.max(0, Math.floor((Date.now() - state.lastSyncAt.getTime()) / 60000));
+    syncEl.textContent = minutesAgo === 0
+        ? 'Synchronisé à l’instant'
+        : `Synchronisé il y a ${minutesAgo} min`;
 }
 
 // ============================================
@@ -645,16 +742,7 @@ async function reportAvailability(fuelType, status, comment = '') {
         // Show success
         showToast('Signalement enregistré ! Merci 🙏', 'success');
         
-        // Refresh stations
-        state.pagination.page = 1;
-        state.stations = [];
-        await loadStations();
-        
-        // Update selected station with fresh data
-        const updatedStation = state.stations.find(s => s.id === state.selectedStation.id);
-        if (updatedStation) {
-            selectStation(updatedStation);
-        }
+        await refreshStations({ keepSelection: true, showToastOnError: false });
         
     } catch (error) {
         console.error('Error reporting:', error);
@@ -676,18 +764,7 @@ async function startLivePulse() {
 function startStationsRefresh() {
     setInterval(async () => {
         try {
-            const selectedStationId = state.selectedStation?.id;
-
-            state.pagination.page = 1;
-            state.stations = [];
-            await loadStations();
-
-            if (selectedStationId) {
-                const refreshedStation = state.stations.find(s => s.id === selectedStationId);
-                if (refreshedStation) {
-                    selectStation(refreshedStation);
-                }
-            }
+            await refreshStations({ keepSelection: true, showToastOnError: false });
         } catch (error) {
             console.error('Error refreshing stations:', error);
         }
@@ -726,35 +803,73 @@ async function updatePulse() {
 // EVENT LISTENERS
 // ============================================
 function setupEventListeners() {
-    // Action buttons - now with fuel type selection
     elements.btnAvailable.addEventListener('click', () => {
         showFuelTypeSelector('Disponible');
     });
-    
+
     elements.btnEmpty.addEventListener('click', () => {
         showFuelTypeSelector('Épuisé');
     });
-    
-    // Navigation
+
     elements.navButtons.forEach(btn => {
         btn.addEventListener('click', () => {
             const view = btn.dataset.view;
             switchView(view);
-            
-            // Update active state
+
             elements.navButtons.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
         });
     });
-    
-    // Close sheet on handle click
+
     document.querySelector('.sheet-handle')?.addEventListener('click', closeStationSheet);
-    
-    // Map click to close sheet
     state.map.on('click', closeStationSheet);
-    
-    // Install button
     elements.installBtn.addEventListener('click', installPWA);
+
+    document.addEventListener('click', async (event) => {
+        const target = event.target;
+
+        if (target?.id === 'refresh-nearby-btn') {
+            await refreshStations({ keepSelection: true, showToastOnError: true });
+            return;
+        }
+
+        if (target?.id === 'apply-filters-btn') {
+            const queryInput = document.getElementById('search-input');
+            const fuelSelect = document.getElementById('filter-fuel-select');
+            const radiusSelect = document.getElementById('filter-radius-select');
+            const freshnessSelect = document.getElementById('filter-freshness-select');
+            const sortSelect = document.getElementById('filter-sort-select');
+
+            state.searchFilters.query = String(queryInput?.value || '').trim();
+            state.searchFilters.availableFuel = String(fuelSelect?.value || 'all');
+            state.searchFilters.radius = Number(radiusSelect?.value || 10);
+            state.searchFilters.freshnessMinutes = Number(freshnessSelect?.value || 240);
+            state.searchFilters.sortBy = String(sortSelect?.value || 'distance');
+
+            await refreshStations({ keepSelection: true, showToastOnError: true });
+            return;
+        }
+
+        if (target?.id === 'electricity-apply-btn') {
+            const statusSelect = document.getElementById('electricity-status-select');
+            const radiusSelect = document.getElementById('electricity-radius-select');
+            const freshnessSelect = document.getElementById('electricity-freshness-select');
+            const sortSelect = document.getElementById('electricity-sort-select');
+
+            state.electricityFilters.status = String(statusSelect?.value || 'all');
+            state.electricityFilters.radius = Number(radiusSelect?.value || 10);
+            state.electricityFilters.freshnessMinutes = Number(freshnessSelect?.value || 240);
+            state.electricityFilters.sortBy = String(sortSelect?.value || 'distance');
+
+            await refreshElectricityView(true);
+            return;
+        }
+
+        if (target?.id === 'electricity-refresh-btn') {
+            await refreshElectricityView(true);
+            return;
+        }
+    });
 }
 
 // ============================================
@@ -898,6 +1013,9 @@ function switchView(view) {
         case 'alerts':
             showAlertsView();
             break;
+        case 'electricity':
+            showElectricityView();
+            break;
         case 'add-station':
             showAddStationView();
             break;
@@ -905,7 +1023,6 @@ function switchView(view) {
 }
 
 function showListView() {
-    // Create list view if not exists
     let listView = document.getElementById('list-view');
     if (!listView) {
         listView = document.createElement('div');
@@ -913,64 +1030,100 @@ function showListView() {
         listView.className = 'view-container';
         listView.innerHTML = `
             <div class="view-header">
-                <h2>Liste des stations</h2>
-                <input type="text" id="search-input" placeholder="Rechercher une station..." class="search-input">
+                <h2>Stations autour de moi</h2>
+                <p id="sync-info" class="view-subtitle">Synchronisation en attente</p>
+                <input type="text" id="search-input" placeholder="Rechercher station ou enseigne..." class="search-input">
+                <div class="filters-grid">
+                    <select id="filter-fuel-select" class="search-input">
+                        <option value="all">Tous carburants</option>
+                        <option value="Essence">Essence dispo</option>
+                        <option value="Gazole">Gazole dispo</option>
+                    </select>
+                    <select id="filter-radius-select" class="search-input">
+                        <option value="2">Rayon 2 km</option>
+                        <option value="5">Rayon 5 km</option>
+                        <option value="10" selected>Rayon 10 km</option>
+                        <option value="20">Rayon 20 km</option>
+                    </select>
+                    <select id="filter-freshness-select" class="search-input">
+                        <option value="30">Mis à jour < 30 min</option>
+                        <option value="60">Mis à jour < 1h</option>
+                        <option value="240" selected>Mis à jour < 4h</option>
+                    </select>
+                    <select id="filter-sort-select" class="search-input">
+                        <option value="distance" selected>Trier: distance</option>
+                        <option value="recent">Trier: fraîcheur</option>
+                        <option value="name">Trier: nom</option>
+                    </select>
+                </div>
+                <div class="filters-actions">
+                    <button id="apply-filters-btn" class="form-submit-btn" type="button">Appliquer filtres</button>
+                    <button id="refresh-nearby-btn" class="modal-close" type="button">Rafraîchir autour de moi</button>
+                </div>
             </div>
             <div class="station-list" id="station-list-container"></div>
         `;
         document.body.appendChild(listView);
-        
-        // Add search listener
-        listView.querySelector('#search-input').addEventListener('input', (e) => {
-            filterStationList(e.target.value);
-        });
+
+        const queryInput = listView.querySelector('#search-input');
+        if (queryInput) {
+            queryInput.addEventListener('input', (e) => {
+                state.searchFilters.query = String(e.target.value || '').trim();
+                renderStations();
+            });
+        }
     }
-    
-    // Render list
-    renderStationList();
-    
-    // Show list
+
+    const fuelSelect = listView.querySelector('#filter-fuel-select');
+    const radiusSelect = listView.querySelector('#filter-radius-select');
+    const freshnessSelect = listView.querySelector('#filter-freshness-select');
+    const sortSelect = listView.querySelector('#filter-sort-select');
+
+    if (fuelSelect) fuelSelect.value = state.searchFilters.availableFuel;
+    if (radiusSelect) radiusSelect.value = String(state.searchFilters.radius);
+    if (freshnessSelect) freshnessSelect.value = String(state.searchFilters.freshnessMinutes);
+    if (sortSelect) sortSelect.value = state.searchFilters.sortBy;
+
+    renderStationList(applyClientSearchFilter(state.stations));
+    updateSyncIndicator();
     listView.style.display = 'block';
 }
 
 function renderStationList(filteredStations = null) {
     const container = document.getElementById('station-list-container');
     if (!container) return;
-    
+
     const stationsToRender = filteredStations || state.stations;
-    
+
     if (stationsToRender.length === 0) {
-        container.innerHTML = '<div class="empty-state">Aucune station trouvée</div>';
+        container.innerHTML = '<div class="empty-state">Aucune station correspondant aux filtres</div>';
         return;
     }
-    
-    container.innerHTML = stationsToRender.map(station => `
-        <div class="station-list-item" onclick="selectStationById(${station.id})">
-            <div class="station-list-header">
-                <span class="station-list-name">${station.name}</span>
-                <span class="station-list-status ${getStationStatus(station)}"></span>
+
+    container.innerHTML = stationsToRender.map(station => {
+        const essence = station.essence_signalement;
+        const gazole = station.gazole_signalement;
+
+        return `
+            <div class="station-list-item" onclick="selectStationById(${station.id})">
+                <div class="station-list-header">
+                    <span class="station-list-name">${station.name}</span>
+                    <span class="station-list-status ${getStationStatus(station)}"></span>
+                </div>
+                <div class="station-list-meta">
+                    <span>${station.brand}</span>
+                    ${station.distance ? `<span class="distance-badge">${station.distance} km</span>` : ''}
+                    ${station.has_recent_signalement ? '<span class="fresh-badge">Récent</span>' : ''}
+                </div>
+                <div class="fuel-inline-statuses">
+                    <span class="fuel-inline-badge ${getFuelClass(essence)}">Essence: ${getFuelBadgeText(essence)}</span>
+                    <span class="fuel-inline-badge ${getFuelClass(gazole)}">Gazole: ${getFuelBadgeText(gazole)}</span>
+                </div>
             </div>
-            <div class="station-list-meta">
-                <span>${station.brand}</span>
-                ${station.distance ? `<span class="distance-badge">${station.distance} km</span>` : ''}
-                ${station.has_recent_signalement ? '<span class="fresh-badge">Récent</span>' : ''}
-            </div>
-        </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
-function filterStationList(query) {
-    if (!query.trim()) {
-        renderStationList();
-        return;
-    }
-    
-    const filtered = state.stations.filter(station => 
-        station.name.toLowerCase().includes(query.toLowerCase()) ||
-        station.brand.toLowerCase().includes(query.toLowerCase())
-    );
-    renderStationList(filtered);
-}
 
 function showAlertsView() {
     // Create alerts view if not exists
@@ -1031,6 +1184,227 @@ function selectStationById(id) {
         elements.navButtons[0].classList.add('active');
     }
 }
+
+function getElectricityStatusClass(status) {
+    if (status === 'Disponible' || status === 'Retour récent') return 'available';
+    if (status === 'Instable') return 'unstable';
+    if (status === 'Coupure' || status === 'Épuisé') return 'empty';
+    return 'unknown';
+}
+
+function getElectricityStatusLabel(item) {
+    const signal = item.latest_signalement;
+    if (!signal) return 'Inconnu';
+    const time = signal.time_ago ? ` • ${signal.time_ago}` : '';
+    const load = signal.load_level ? ` • Charge ${signal.load_level}` : '';
+    return `${signal.status}${time}${load}`;
+}
+
+function updateElectricitySyncInfo() {
+    const el = document.getElementById('electricity-sync-info');
+    if (!el) return;
+
+    const cacheInfo = state.electricityLastSyncAt
+        ? 'Données en ligne'
+        : (localStorage.getItem('bko_electricity_cache') ? 'Données cache' : 'Synchronisation en attente');
+
+    if (!state.electricityLastSyncAt) {
+        el.textContent = cacheInfo;
+        return;
+    }
+
+    const minutesAgo = Math.max(0, Math.floor((Date.now() - state.electricityLastSyncAt.getTime()) / 60000));
+    const freshness = minutesAgo === 0 ? 'Synchronisé à l’instant' : `Synchronisé il y a ${minutesAgo} min`;
+    el.textContent = `${freshness} • ${cacheInfo}`;
+}
+
+async function loadElectricityNearby() {
+    if (!state.userLocation) return;
+
+    const url = new URL(`${CONFIG.API_BASE_URL}/electricity/nearby/`);
+    url.searchParams.append('lat', state.userLocation.lat);
+    url.searchParams.append('lon', state.userLocation.lng);
+    url.searchParams.append('radius', String(state.electricityFilters.radius));
+    url.searchParams.append('freshness_minutes', String(state.electricityFilters.freshnessMinutes));
+    url.searchParams.append('sort_by', state.electricityFilters.sortBy);
+    if (state.electricityFilters.status !== 'all') {
+        url.searchParams.append('status', state.electricityFilters.status);
+    }
+
+    const response = await fetch(url);
+    if (!response.ok) {
+        const cached = localStorage.getItem('bko_electricity_cache');
+        if (cached) {
+            state.electricityZones = JSON.parse(cached);
+            return;
+        }
+        throw new Error('Erreur chargement zones électriques');
+    }
+
+    state.electricityZones = await response.json();
+    localStorage.setItem('bko_electricity_cache', JSON.stringify(state.electricityZones));
+    state.electricityLastSyncAt = new Date();
+}
+
+async function loadElectricityRecommendation() {
+    if (!state.userLocation) return;
+
+    const url = new URL(`${CONFIG.API_BASE_URL}/electricity/recommendation/`);
+    url.searchParams.append('lat', state.userLocation.lat);
+    url.searchParams.append('lon', state.userLocation.lng);
+    url.searchParams.append('radius', String(state.electricityFilters.radius));
+
+    const response = await fetch(url);
+    if (!response.ok) {
+        const cached = localStorage.getItem('bko_electricity_reco_cache');
+        state.electricityRecommendation = cached ? JSON.parse(cached) : null;
+        return;
+    }
+
+    const payload = await response.json();
+    state.electricityRecommendation = payload.recommendation || null;
+    localStorage.setItem('bko_electricity_reco_cache', JSON.stringify(state.electricityRecommendation));
+}
+
+function renderElectricityList() {
+    const container = document.getElementById('electricity-list-container');
+    if (!container) return;
+
+    if (!state.electricityZones.length) {
+        container.innerHTML = '<div class="empty-state">Aucune zone électrique trouvée</div>';
+        return;
+    }
+
+    container.innerHTML = state.electricityZones.map(item => {
+        const zone = item.zone;
+        const status = item.latest_signalement?.status || 'Inconnu';
+        const statusClass = getElectricityStatusClass(status);
+        const reliability = item.reliability_score ?? zone.reliability_score ?? 0;
+
+        return `
+            <div class="station-list-item electricity-item" onclick="focusElectricityZone(${zone.id}, ${zone.latitude}, ${zone.longitude})">
+                <div class="station-list-header">
+                    <span class="station-list-name">${zone.name}</span>
+                    <span class="station-list-status ${statusClass}"></span>
+                </div>
+                <div class="station-list-meta">
+                    <span>${zone.zone_type}</span>
+                    <span class="distance-badge">${item.distance_km} km</span>
+                    <span class="fresh-badge">Fiabilité ${reliability}%</span>
+                </div>
+                <div class="fuel-inline-statuses">
+                    <span class="fuel-inline-badge ${statusClass}">${getElectricityStatusLabel(item)}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    const recommendationBox = document.getElementById('electricity-recommendation-box');
+    if (!recommendationBox) return;
+
+    if (!state.electricityRecommendation) {
+        recommendationBox.innerHTML = '<div class="empty-state">Aucune recommandation disponible</div>';
+        return;
+    }
+
+    const rec = state.electricityRecommendation;
+    recommendationBox.innerHTML = `
+        <div class="alert-item">
+            <div class="alert-header">
+                <span class="alert-station">Meilleure zone: ${rec.zone.name}</span>
+                <span class="alert-time">${rec.distance_km} km</span>
+            </div>
+            <div class="alert-message">
+                <span class="alert-fuel">${rec.latest_signalement?.status || 'Inconnu'}</span>
+                <span class="alert-approvals">Score ${rec.score}</span>
+            </div>
+        </div>
+    `;
+}
+
+async function refreshElectricityView(showErrorToast = false) {
+    try {
+        await loadElectricityNearby();
+        await loadElectricityRecommendation();
+        renderElectricityList();
+        updateElectricitySyncInfo();
+    } catch (error) {
+        console.error('Error loading electricity view:', error);
+        if (showErrorToast) {
+            showToast('Erreur chargement section électricité', 'error');
+        }
+    }
+}
+
+function showElectricityView() {
+    let electricityView = document.getElementById('electricity-view');
+    if (!electricityView) {
+        electricityView = document.createElement('div');
+        electricityView.id = 'electricity-view';
+        electricityView.className = 'view-container';
+        electricityView.innerHTML = `
+            <div class="view-header">
+                <h2>Électricité autour de moi</h2>
+                <p id="electricity-sync-info" class="view-subtitle">Synchronisation en attente</p>
+                <div class="filters-grid">
+                    <select id="electricity-status-select" class="search-input">
+                        <option value="all">Tous statuts</option>
+                        <option value="Disponible">Disponible</option>
+                        <option value="Retour récent">Retour récent</option>
+                        <option value="Instable">Instable</option>
+                        <option value="Coupure">Coupure</option>
+                    </select>
+                    <select id="electricity-radius-select" class="search-input">
+                        <option value="2">Rayon 2 km</option>
+                        <option value="5">Rayon 5 km</option>
+                        <option value="10" selected>Rayon 10 km</option>
+                        <option value="20">Rayon 20 km</option>
+                    </select>
+                    <select id="electricity-freshness-select" class="search-input">
+                        <option value="30">Mis à jour < 30 min</option>
+                        <option value="60">Mis à jour < 1h</option>
+                        <option value="240" selected>Mis à jour < 4h</option>
+                    </select>
+                    <select id="electricity-sort-select" class="search-input">
+                        <option value="distance" selected>Trier: distance</option>
+                        <option value="reliability">Trier: fiabilité</option>
+                        <option value="freshness">Trier: fraîcheur</option>
+                    </select>
+                </div>
+                <div class="filters-actions">
+                    <button id="electricity-apply-btn" class="form-submit-btn" type="button">Appliquer</button>
+                    <button id="electricity-refresh-btn" class="modal-close" type="button">Rafraîchir</button>
+                </div>
+            </div>
+            <div id="electricity-recommendation-box" class="alerts-list"></div>
+            <div id="electricity-list-container" class="station-list"></div>
+        `;
+        document.body.appendChild(electricityView);
+    }
+
+    const statusSelect = electricityView.querySelector('#electricity-status-select');
+    const radiusSelect = electricityView.querySelector('#electricity-radius-select');
+    const freshnessSelect = electricityView.querySelector('#electricity-freshness-select');
+    const sortSelect = electricityView.querySelector('#electricity-sort-select');
+
+    if (statusSelect) statusSelect.value = state.electricityFilters.status;
+    if (radiusSelect) radiusSelect.value = String(state.electricityFilters.radius);
+    if (freshnessSelect) freshnessSelect.value = String(state.electricityFilters.freshnessMinutes);
+    if (sortSelect) sortSelect.value = state.electricityFilters.sortBy;
+
+    refreshElectricityView(false);
+    electricityView.style.display = 'block';
+}
+
+function focusElectricityZone(_id, lat, lon) {
+    switchView('map');
+    state.map.setView([lat, lon], 14);
+    elements.navButtons.forEach(b => b.classList.remove('active'));
+    const mapBtn = Array.from(elements.navButtons).find(b => b.dataset.view === 'map');
+    if (mapBtn) mapBtn.classList.add('active');
+}
+
+window.focusElectricityZone = focusElectricityZone;
 
 function showAddStationView() {
     let addView = document.getElementById('add-station-view');
@@ -1149,9 +1523,7 @@ async function handleAddStationSubmit(event) {
 
         form.reset();
 
-        state.pagination.page = 1;
-        state.stations = [];
-        await loadStations();
+        await refreshStations({ keepSelection: false, showToastOnError: true });
 
         switchView('map');
         elements.navButtons.forEach(b => b.classList.remove('active'));

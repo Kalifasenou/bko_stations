@@ -16,6 +16,10 @@ from .views import (
     brands_list,
     stations_nearby,
     electricity_by_location,
+    electricity_nearby,
+    electricity_recommendation,
+    electricity_timeline,
+    electricity_statistics,
     register_user,
 )
 
@@ -42,6 +46,11 @@ urlpatterns = [
     # Map endpoints
     path('fuel-availability-map/', fuel_availability_map, name='fuel-availability-map'),
     path('electricity/by-location/', electricity_by_location, name='electricity-by-location'),
+    path('electricity/nearby/', electricity_nearby, name='electricity-nearby'),
+    path('electricity/recommendation/', electricity_recommendation, name='electricity-recommendation'),
+    path('electricity/zones/<int:zone_id>/timeline/', electricity_timeline, name='electricity-timeline'),
+    path('electricity/statistics/', electricity_statistics, name='electricity-statistics'),
+    path('electricity/signalements/quick/', ElectriciteSignalementViewSet.as_view({'post': 'create'}), name='electricity-signalement-quick'),
     path('signalements/heatmap/', signalements_heatmap, name='signalements-heatmap'),
     path('monitoring/', monitoring_overview, name='monitoring-overview'),
     path('healthz/', health_check, name='healthz'),

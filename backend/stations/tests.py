@@ -415,9 +415,32 @@ class ElectricityZoneAPITests(APITestCase):
 
         response = self.client.post('/api/electricite-signalements/', {
             'zone': self.zone.id,
-            'status': 'Instable'
+            'status': 'Instable',
+            'load_level': 'Faible',
+            'source_type': 'Ménage',
+            'duration_estimate_minutes': 40,
         }, format='json')
         self.assertIn(response.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
+
+    def test_electricity_nearby_endpoint(self):
+        response = self.client.get('/api/electricity/nearby/?lat=12.6499&lon=-7.9851&radius=10')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsInstance(response.data, list)
+
+    def test_electricity_recommendation_endpoint(self):
+        response = self.client.get('/api/electricity/recommendation/?lat=12.6499&lon=-7.9851&radius=10')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('recommendation', response.data)
+
+    def test_electricity_statistics_endpoint(self):
+        response = self.client.get('/api/electricity/statistics/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('total_zones', response.data)
+
+    def test_electricity_timeline_endpoint(self):
+        response = self.client.get(f'/api/electricity/zones/{self.zone.id}/timeline/?hours=24')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('timeline', response.data)
 
 
 class StatisticsAPITests(APITestCase):

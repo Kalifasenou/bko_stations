@@ -108,10 +108,10 @@ stations = [
 ]
 
 zones_electriques = [
-    {'name': 'ACI 2000', 'zone_type': 'Quartier', 'latitude': 12.6400, 'longitude': -8.0000, 'radius_km': 2.5, 'status': 'Disponible'},
-    {'name': 'Badalabougou', 'zone_type': 'Quartier', 'latitude': 12.6480, 'longitude': -7.9860, 'radius_km': 2.0, 'status': 'Épuisé'},
-    {'name': 'Kalaban Coura', 'zone_type': 'Quartier', 'latitude': 12.5870, 'longitude': -7.9670, 'radius_km': 2.0, 'status': 'Instable'},
-    {'name': 'Faladié', 'zone_type': 'Secteur', 'latitude': 12.5990, 'longitude': -7.9460, 'radius_km': 2.0, 'status': 'Disponible'},
+    {'name': 'ACI 2000', 'zone_type': 'Quartier', 'latitude': 12.6400, 'longitude': -8.0000, 'radius_km': 2.5, 'status': 'Disponible', 'load_level': 'Normal', 'source_type': 'Ménage', 'duration_estimate_minutes': 120},
+    {'name': 'Badalabougou', 'zone_type': 'Quartier', 'latitude': 12.6480, 'longitude': -7.9860, 'radius_km': 2.0, 'status': 'Coupure', 'load_level': 'Faible', 'source_type': 'Commerçant', 'duration_estimate_minutes': 90},
+    {'name': 'Kalaban Coura', 'zone_type': 'Quartier', 'latitude': 12.5870, 'longitude': -7.9670, 'radius_km': 2.0, 'status': 'Instable', 'load_level': 'Faible', 'source_type': 'Observateur', 'duration_estimate_minutes': 45},
+    {'name': 'Faladié', 'zone_type': 'Secteur', 'latitude': 12.5990, 'longitude': -7.9460, 'radius_km': 2.0, 'status': 'Retour récent', 'load_level': 'Normal', 'source_type': 'Ménage', 'duration_estimate_minutes': 30},
 ]
 
 for data in stations:
@@ -151,6 +151,9 @@ for zone_data in zones_electriques:
         zone=zone,
         defaults={
             'status': zone_data['status'],
+            'load_level': zone_data.get('load_level', 'Normal'),
+            'source_type': zone_data.get('source_type', 'Observateur'),
+            'duration_estimate_minutes': zone_data.get('duration_estimate_minutes', 0),
             'timestamp': timezone.now(),
             'approval_count': 1,
             'comment': 'Initialisation seed électricité',

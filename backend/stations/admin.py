@@ -61,8 +61,8 @@ class ZoneElectriqueAdmin(admin.ModelAdmin):
 
 @admin.register(ElectriciteSignalement)
 class ElectriciteSignalementAdmin(admin.ModelAdmin):
-    list_display = ['zone', 'status', 'timestamp', 'approval_count', 'is_expired', 'ip']
-    list_filter = ['status', 'timestamp', 'zone__zone_type']
+    list_display = ['zone', 'status', 'load_level', 'source_type', 'duration_estimate_minutes', 'timestamp', 'approval_count', 'is_expired', 'ip']
+    list_filter = ['status', 'load_level', 'source_type', 'timestamp', 'zone__zone_type']
     search_fields = ['zone__name', 'ip', 'comment']
     readonly_fields = ['timestamp', 'approval_count', 'ip', 'is_expired', 'comment']
     ordering = ['-timestamp']

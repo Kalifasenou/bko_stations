@@ -8,7 +8,7 @@ from django.utils import timezone
 from django.views.decorators.cache import cache_page
 from django.utils.decorators import method_decorator
 from datetime import timedelta
-from django.db.models import F, Count, Q, Prefetch, Case, When, IntegerField
+from django.db.models import F, Count, Q, Prefetch, Case, When, IntegerField, Max
 from django.shortcuts import get_object_or_404
 from django.core.exceptions import ValidationError
 from django.core.cache import cache
@@ -82,8 +82,7 @@ class StationViewSet(viewsets.ModelViewSet):
                 radius = float(self.request.query_params.get('radius', 10))
                 if radius <= 0:
                     raise ValidationError("Le rayon doit être positif")
-                
-                # Récupérer toutes les stations et calculer les distances
+
                 stations_with_distance = []
                 distance_map = {}
                 for station in queryset:
@@ -93,27 +92,48 @@ class StationViewSet(viewsets.ModelViewSet):
                         station.distance = rounded_distance
                         stations_with_distance.append(station)
                         distance_map[station.id] = rounded_distance
-                
-                # Trier par distance et conserver l'ordre pour la pagination
+
                 stations_with_distance.sort(key=lambda x: x.distance)
                 ids = [s.id for s in stations_with_distance]
-                
+
                 if not ids:
                     return Station.objects.none()
-                
+
                 preserved_order = Case(
                     *[When(pk=pk, then=pos) for pos, pk in enumerate(ids)],
                     output_field=IntegerField()
                 )
                 queryset = Station.objects.filter(id__in=ids).annotate(_distance_order=preserved_order).order_by('_distance_order')
-                
-                # Réappliquer les distances après réévaluation du QuerySet
+
                 for station in queryset:
                     station.distance = distance_map.get(station.id)
             except ValidationError as e:
                 logger.warning(f"Erreur de validation GPS: {e}")
                 return Station.objects.none()
-        
+
+        available_fuel = self.request.query_params.get('available_fuel')
+        if available_fuel in ['Essence', 'Gazole']:
+            queryset = queryset.filter(
+                signalements__fuel_type=available_fuel,
+                signalements__status='Disponible',
+                signalements__timestamp__gte=timezone.now() - timedelta(hours=4)
+            ).distinct()
+
+        freshness_minutes = self.request.query_params.get('freshness_minutes')
+        if freshness_minutes:
+            try:
+                freshness_minutes = max(1, min(int(freshness_minutes), 240))
+                threshold = timezone.now() - timedelta(minutes=freshness_minutes)
+                queryset = queryset.filter(signalements__timestamp__gte=threshold).distinct()
+            except ValueError:
+                pass
+
+        sort_by = self.request.query_params.get('sort_by')
+        if sort_by == 'recent':
+            queryset = queryset.annotate(last_signalement_at=Max('signalements__timestamp')).order_by('-last_signalement_at', 'name')
+        elif sort_by == 'name':
+            queryset = queryset.order_by('name')
+
         return queryset
 
     @action(detail=True, methods=['get'])
@@ -210,8 +230,11 @@ class SignalementViewSet(viewsets.ModelViewSet):
         # Nouveau statut (ou absence d'historique récent): créer un nouvel événement
         data = request.data.copy()
         data['ip'] = ip
+        data.setdefault('load_level', request.data.get('load_level', 'Normal'))
+        data.setdefault('source_type', request.data.get('source_type', 'Observateur'))
+        data.setdefault('duration_estimate_minutes', request.data.get('duration_estimate_minutes', 0))
         serializer = self.get_serializer(data=data)
-        
+
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -331,9 +354,9 @@ class ElectriciteSignalementViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        if new_status not in ['Disponible', 'Épuisé', 'Instable']:
+        if new_status not in ['Disponible', 'Coupure', 'Instable', 'Retour récent', 'Épuisé']:
             return Response(
-                {"error": "Le statut électricité doit être Disponible, Épuisé ou Instable"},
+                {"error": "Le statut électricité doit être Disponible, Coupure, Instable ou Retour récent"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -356,10 +379,22 @@ class ElectriciteSignalementViewSet(viewsets.ModelViewSet):
             timestamp__gte=four_hours_ago
         ).order_by('-timestamp').first()
 
-        if existing_signalement and existing_signalement.status == new_status:
+        incoming_load = request.data.get('load_level', 'Normal')
+        incoming_source = request.data.get('source_type', 'Observateur')
+        incoming_duration = int(request.data.get('duration_estimate_minutes', 0) or 0)
+
+        if (
+            existing_signalement
+            and existing_signalement.status == new_status
+            and existing_signalement.load_level == incoming_load
+        ):
             existing_signalement.approval_count = F('approval_count') + 1
             existing_signalement.timestamp = timezone.now()
-            existing_signalement.save(update_fields=['approval_count', 'timestamp'])
+            existing_signalement.source_type = incoming_source
+            existing_signalement.duration_estimate_minutes = incoming_duration
+            existing_signalement.save(
+                update_fields=['approval_count', 'timestamp', 'source_type', 'duration_estimate_minutes']
+            )
             existing_signalement.refresh_from_db()
             serializer = self.get_serializer(existing_signalement)
             return Response(serializer.data, status=status.HTTP_200_OK)
@@ -445,6 +480,166 @@ def electricity_by_location(request):
         'zone': ZoneElectriqueSerializer(nearest_zone).data if nearest_zone else None,
         'distance_km': round(min_distance, 2) if min_distance is not None else None,
         'signalement': ElectriciteSignalementSerializer(latest).data if latest else None,
+        'reliability_score': nearest_zone.get_reliability_score() if nearest_zone else 0,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def electricity_nearby(request):
+    """Liste les zones électriques proches avec filtres"""
+    lat = request.query_params.get('lat')
+    lon = request.query_params.get('lon')
+    if not lat or not lon:
+        return Response({"error": "Les paramètres 'lat' et 'lon' sont requis"}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        lat, lon = utils_validate_coordinates(lat, lon)
+        radius = float(request.query_params.get('radius', 10))
+    except (ValidationError, ValueError) as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    status_filter = request.query_params.get('status')
+    try:
+        freshness_minutes = int(request.query_params.get('freshness_minutes', 240))
+    except ValueError:
+        freshness_minutes = 240
+    threshold = timezone.now() - timedelta(minutes=max(1, min(freshness_minutes, 1440)))
+
+    results = []
+    for zone in ZoneElectrique.objects.filter(is_active=True):
+        distance = calculate_distance(lat, lon, zone.latitude, zone.longitude)
+        if distance > radius:
+            continue
+
+        latest = zone.signalements_electricite.filter(timestamp__gte=threshold).order_by('-timestamp').first()
+        if status_filter and status_filter != 'all' and (not latest or latest.status != status_filter):
+            continue
+
+        results.append({
+            'zone': ZoneElectriqueSerializer(zone).data,
+            'distance_km': round(distance, 2),
+            'latest_signalement': ElectriciteSignalementSerializer(latest).data if latest else None,
+            'reliability_score': zone.get_reliability_score(),
+        })
+
+    sort_by = request.query_params.get('sort_by', 'distance')
+    if sort_by == 'reliability':
+        results.sort(key=lambda x: x['reliability_score'], reverse=True)
+    elif sort_by == 'freshness':
+        results.sort(key=lambda x: x['latest_signalement']['timestamp'] if x['latest_signalement'] else '', reverse=True)
+    else:
+        results.sort(key=lambda x: x['distance_km'])
+
+    return Response(results)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def electricity_recommendation(request):
+    """Retourne la meilleure zone recommandée près de l'utilisateur"""
+    lat = request.query_params.get('lat')
+    lon = request.query_params.get('lon')
+    if not lat or not lon:
+        return Response({"error": "Les paramètres 'lat' et 'lon' sont requis"}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        lat, lon = utils_validate_coordinates(lat, lon)
+        radius = float(request.query_params.get('radius', 10))
+    except (ValidationError, ValueError) as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    candidates = []
+    for zone in ZoneElectrique.objects.filter(is_active=True):
+        distance = calculate_distance(lat, lon, zone.latitude, zone.longitude)
+        if distance > radius:
+            continue
+        latest = zone.get_latest_signalement()
+        if not latest:
+            continue
+
+        status_bonus = 0
+        if latest.status == 'Disponible':
+            status_bonus = 40
+        elif latest.status == 'Retour récent':
+            status_bonus = 25
+        elif latest.status == 'Instable':
+            status_bonus = 10
+
+        score = zone.get_reliability_score() + status_bonus - min(30, int(distance * 3))
+        candidates.append((score, zone, distance, latest))
+
+    if not candidates:
+        return Response({'recommendation': None})
+
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    best_score, best_zone, best_distance, best_signalement = candidates[0]
+
+    return Response({
+        'recommendation': {
+            'zone': ZoneElectriqueSerializer(best_zone).data,
+            'distance_km': round(best_distance, 2),
+            'latest_signalement': ElectriciteSignalementSerializer(best_signalement).data,
+            'score': best_score,
+        }
+    })
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def electricity_timeline(request, zone_id):
+    """Historique des signalements électricité pour une zone"""
+    try:
+        zone = ZoneElectrique.objects.get(pk=zone_id, is_active=True)
+    except ZoneElectrique.DoesNotExist:
+        return Response({"error": "Zone introuvable"}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        hours = int(request.query_params.get('hours', 24))
+    except ValueError:
+        hours = 24
+    hours = max(1, min(hours, 168))
+    threshold = timezone.now() - timedelta(hours=hours)
+
+    timeline = zone.signalements_electricite.filter(timestamp__gte=threshold).order_by('-timestamp')[:200]
+    serializer = ElectriciteSignalementSerializer(timeline, many=True)
+    return Response({
+        'zone': ZoneElectriqueSerializer(zone).data,
+        'timeline': serializer.data,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def electricity_statistics(request):
+    """Statistiques dédiées électricité"""
+    now = timezone.now()
+    four_hours_ago = now - timedelta(hours=4)
+    twenty_four_hours_ago = now - timedelta(hours=24)
+
+    active_zones = ZoneElectrique.objects.filter(is_active=True)
+    recent = ElectriciteSignalement.objects.filter(timestamp__gte=four_hours_ago)
+
+    by_status = recent.values('status').annotate(count=Count('id')).order_by('-count')
+    top_zones = active_zones.annotate(
+        signalement_count=Count('signalements_electricite', filter=Q(signalements_electricite__timestamp__gte=twenty_four_hours_ago))
+    ).order_by('-signalement_count')[:5]
+
+    return Response({
+        'total_zones': active_zones.count(),
+        'recent_signalements': recent.count(),
+        'by_status': list(by_status),
+        'top_zones': [
+            {
+                'id': z.id,
+                'name': z.name,
+                'zone_type': z.zone_type,
+                'signalement_count': z.signalement_count,
+                'reliability_score': z.get_reliability_score(),
+            }
+            for z in top_zones
+        ],
+        'last_updated': now.isoformat(),
     })
 
 

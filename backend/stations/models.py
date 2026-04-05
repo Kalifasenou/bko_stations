@@ -45,6 +45,35 @@ class ZoneElectrique(models.Model):
             timestamp__gte=timezone.now() - timedelta(hours=4)
         ).order_by('-timestamp').first()
 
+    def get_reliability_score(self):
+        """Score de fiabilité (0-100) basé sur récence + confirmations"""
+        four_hours_ago = timezone.now() - timedelta(hours=4)
+        recent = self.signalements_electricite.filter(timestamp__gte=four_hours_ago)
+        if not recent.exists():
+            return 0
+
+        weighted = 0
+        weight_sum = 0
+        for signalement in recent:
+            age_minutes = max(1, int((timezone.now() - signalement.timestamp).total_seconds() / 60))
+            recency_weight = max(1, 240 - age_minutes)
+            confidence = min(10, signalement.approval_count)
+            weighted += recency_weight * confidence
+            weight_sum += recency_weight * 10
+
+        return int((weighted / weight_sum) * 100) if weight_sum else 0
+
+    @property
+    def electricity_status_color(self):
+        latest = self.get_latest_signalement()
+        if not latest:
+            return 'gray'
+        if latest.status in ['Disponible', 'Retour récent']:
+            return 'green'
+        if latest.status == 'Instable':
+            return 'yellow'
+        return 'red'
+
 
 class Station(models.Model):
     """Station de carburant à Bamako"""
@@ -185,8 +214,20 @@ class ElectriciteSignalement(models.Model):
     """Signalement d'état électrique pour une zone géographique"""
     STATUS_CHOICES = [
         ('Disponible', 'Disponible'),
-        ('Épuisé', 'Épuisé'),
+        ('Coupure', 'Coupure'),
         ('Instable', 'Instable'),
+        ('Retour récent', 'Retour récent'),
+        ('Épuisé', 'Épuisé'),  # compatibilité historique
+    ]
+    LOAD_LEVELS = [
+        ('Faible', 'Faible'),
+        ('Normal', 'Normal'),
+        ('Fort', 'Fort'),
+    ]
+    SOURCE_TYPES = [
+        ('Ménage', 'Ménage'),
+        ('Commerçant', 'Commerçant'),
+        ('Observateur', 'Observateur'),
     ]
 
     zone = models.ForeignKey(
@@ -196,6 +237,9 @@ class ElectriciteSignalement(models.Model):
         verbose_name="Zone"
     )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, verbose_name="Statut électricité")
+    load_level = models.CharField(max_length=20, choices=LOAD_LEVELS, default='Normal', verbose_name="Niveau de charge")
+    source_type = models.CharField(max_length=20, choices=SOURCE_TYPES, default='Observateur', verbose_name="Type de source")
+    duration_estimate_minutes = models.PositiveIntegerField(default=0, verbose_name="Durée estimée (minutes)")
     timestamp = models.DateTimeField(default=timezone.now, verbose_name="Date du signalement")
     approval_count = models.IntegerField(default=1, verbose_name="Nombre d'approbations")
     ip = models.GenericIPAddressField(null=True, blank=True, verbose_name="Adresse IP")

@@ -1133,6 +1133,74 @@ html, body {
     gap: 12px;
 }
 
+.filters-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.filters-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.filters-actions .form-submit-btn,
+.filters-actions .modal-close {
+    flex: 1;
+    margin-top: 0;
+}
+
+.fuel-inline-statuses {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.fuel-inline-badge {
+    display: inline-block;
+    padding: 6px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid var(--border-color);
+}
+
+.fuel-inline-badge.available {
+    color: var(--accent-green);
+    background: var(--accent-green-dim);
+    border-color: var(--accent-green);
+}
+
+.fuel-inline-badge.empty {
+    color: var(--accent-red);
+    background: var(--accent-red-dim);
+    border-color: var(--accent-red);
+}
+
+.fuel-inline-badge.unknown {
+    color: var(--accent-gray);
+    background: var(--accent-gray-dim);
+    border-color: var(--accent-gray);
+}
+
+.station-list-status.unstable {
+    background: var(--accent-yellow);
+    box-shadow: 0 0 8px var(--accent-yellow);
+}
+
+.fuel-inline-badge.unstable {
+    color: var(--accent-yellow);
+    background: var(--accent-yellow-dim);
+    border-color: var(--accent-yellow);
+}
+
+.electricity-item {
+    border-left: 3px solid var(--accent-yellow);
+}
+
 .distance-badge, .fresh-badge {
     padding: 2px 8px;
     background: var(--bg-secondary);
