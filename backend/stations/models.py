@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
@@ -58,10 +59,19 @@ class ZoneElectrique(models.Model):
             age_minutes = max(1, int((timezone.now() - signalement.timestamp).total_seconds() / 60))
             recency_weight = max(1, 240 - age_minutes)
             confidence = min(10, signalement.approval_count)
-            weighted += recency_weight * confidence
+            contributor_weight = signalement.get_contributor_weight()
+            weighted += recency_weight * confidence * contributor_weight
             weight_sum += recency_weight * 10
 
         return int((weighted / weight_sum) * 100) if weight_sum else 0
+
+    def has_conflicting_recent_reports(self):
+        """Détecte des contradictions récentes sur la zone"""
+        two_hours_ago = timezone.now() - timedelta(hours=2)
+        statuses = self.signalements_electricite.filter(
+            timestamp__gte=two_hours_ago
+        ).values_list('status', flat=True).distinct()
+        return len(list(statuses)) > 1
 
     @property
     def electricity_status_color(self):
@@ -161,6 +171,36 @@ class Station(models.Model):
             timestamp__gte=timezone.now() - timedelta(hours=4)
         ).exists()
 
+    def get_confidence_score(self):
+        """Score confiance station (0-100)"""
+        four_hours_ago = timezone.now() - timedelta(hours=4)
+        recent = self.signalements.filter(timestamp__gte=four_hours_ago, fuel_type__in=['Essence', 'Gazole'])
+        if not recent.exists():
+            return 0
+
+        weighted = 0
+        total = 0
+        for signalement in recent:
+            age_minutes = max(1, int((timezone.now() - signalement.timestamp).total_seconds() / 60))
+            recency_weight = max(1, 240 - age_minutes)
+            approval_weight = min(8, signalement.approval_count)
+            weighted += recency_weight * approval_weight
+            total += recency_weight * 8
+
+        return int((weighted / total) * 100) if total else 0
+
+    def has_conflicting_recent_reports(self):
+        """Détecte des statuts contradictoires récents pour un même carburant"""
+        two_hours_ago = timezone.now() - timedelta(hours=2)
+        for fuel in ['Essence', 'Gazole']:
+            statuses = self.signalements.filter(
+                fuel_type=fuel,
+                timestamp__gte=two_hours_ago
+            ).values_list('status', flat=True).distinct()
+            if len(list(statuses)) > 1:
+                return True
+        return False
+
 
 class Signalement(models.Model):
     """Signalement de disponibilité de carburant (stations uniquement)"""
@@ -184,6 +224,14 @@ class Signalement(models.Model):
     timestamp = models.DateTimeField(default=timezone.now, verbose_name="Date du signalement")
     approval_count = models.IntegerField(default=1, verbose_name="Nombre d'approbations")
     ip = models.GenericIPAddressField(null=True, blank=True, verbose_name="Adresse IP")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='fuel_signalements',
+        verbose_name="Utilisateur"
+    )
     comment = models.CharField(
         max_length=255,
         blank=True,
@@ -243,6 +291,14 @@ class ElectriciteSignalement(models.Model):
     timestamp = models.DateTimeField(default=timezone.now, verbose_name="Date du signalement")
     approval_count = models.IntegerField(default=1, verbose_name="Nombre d'approbations")
     ip = models.GenericIPAddressField(null=True, blank=True, verbose_name="Adresse IP")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='electricity_signalements',
+        verbose_name="Utilisateur"
+    )
     comment = models.CharField(max_length=255, blank=True, default='', verbose_name="Commentaire")
 
     class Meta:
@@ -258,6 +314,16 @@ class ElectriciteSignalement(models.Model):
 
     def is_expired(self):
         return timezone.now() - self.timestamp > timedelta(hours=4)
+
+    def get_contributor_weight(self):
+        """Poids du contributeur pour pondérer la confiance"""
+        if self.user and self.user.is_authenticated:
+            recent = ElectriciteSignalement.objects.filter(
+                user=self.user,
+                timestamp__gte=timezone.now() - timedelta(days=30)
+            ).count()
+            return 1.2 if recent >= 5 else 1.0
+        return 1.0
 
     def __str__(self):
         return f"{self.zone.name} - Électricité: {self.status} ({self.approval_count} confirmations)"

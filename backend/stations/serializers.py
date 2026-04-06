@@ -77,16 +77,17 @@ class ZoneElectriqueSerializer(serializers.ModelSerializer):
     """Sérialiseur des zones électriques"""
     latest_signalement = serializers.SerializerMethodField()
     reliability_score = serializers.SerializerMethodField()
+    has_conflicting_reports = serializers.SerializerMethodField()
     electricity_status_color = serializers.ReadOnlyField()
 
     class Meta:
         model = ZoneElectrique
         fields = [
             'id', 'name', 'zone_type', 'latitude', 'longitude', 'radius_km',
-            'is_active', 'latest_signalement', 'reliability_score', 'electricity_status_color',
+            'is_active', 'latest_signalement', 'reliability_score', 'has_conflicting_reports', 'electricity_status_color',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['created_at', 'updated_at', 'latest_signalement', 'reliability_score', 'electricity_status_color']
+        read_only_fields = ['created_at', 'updated_at', 'latest_signalement', 'reliability_score', 'has_conflicting_reports', 'electricity_status_color']
 
     def get_latest_signalement(self, obj):
         latest = obj.get_latest_signalement()
@@ -96,6 +97,9 @@ class ZoneElectriqueSerializer(serializers.ModelSerializer):
 
     def get_reliability_score(self, obj):
         return obj.get_reliability_score()
+
+    def get_has_conflicting_reports(self, obj):
+        return obj.has_conflicting_recent_reports()
 
 
 class ElectriciteSignalementSerializer(serializers.ModelSerializer):
@@ -163,6 +167,8 @@ class StationSerializer(serializers.ModelSerializer):
     status_color = serializers.CharField(read_only=True)
     distance = serializers.SerializerMethodField(required=False)
     has_recent_signalement = serializers.BooleanField(read_only=True)
+    confidence_score = serializers.SerializerMethodField()
+    has_conflicting_reports = serializers.SerializerMethodField()
 
     class Meta:
         model = Station
@@ -171,9 +177,10 @@ class StationSerializer(serializers.ModelSerializer):
             'latitude', 'longitude', 'is_active',
             'created_at', 'updated_at', 'latest_signalement',
             'essence_signalement', 'gazole_signalement',
-            'status_color', 'distance', 'has_recent_signalement'
+            'status_color', 'distance', 'has_recent_signalement',
+            'confidence_score', 'has_conflicting_reports'
         ]
-        read_only_fields = ['created_at', 'updated_at', 'status_color', 'has_recent_signalement']
+        read_only_fields = ['created_at', 'updated_at', 'status_color', 'has_recent_signalement', 'confidence_score', 'has_conflicting_reports']
 
     def get_latest_signalement(self, obj):
         """Retourne le dernier signalement non expiré"""
