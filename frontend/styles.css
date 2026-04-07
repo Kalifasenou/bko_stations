@@ -61,7 +61,7 @@ html, body {
     top: 0;
     left: 0;
     right: 0;
-    bottom: 120px;
+    bottom: 0;
     z-index: 1;
 }
 
@@ -181,7 +181,7 @@ html, body {
    ============================================ */
 .bottom-sheet {
     position: fixed;
-    bottom: 120px;
+    bottom: 0;
     left: 0;
     right: 0;
     background: var(--bg-card);
@@ -189,7 +189,7 @@ html, body {
     z-index: 50;
     transform: translateY(100%);
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    max-height: 60vh;
+    max-height: 50vh;
     box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
 }
 
@@ -204,6 +204,30 @@ html, body {
     border-radius: 2px;
     margin: 12px auto;
     opacity: 0.5;
+}
+
+.sheet-close-btn {
+    display: none;
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 36px;
+    height: 36px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 50%;
+    color: var(--text-secondary);
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    z-index: 5;
+    transition: all 0.2s ease;
+}
+
+.sheet-close-btn:hover {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border-color: var(--accent-red);
 }
 
 .sheet-content {
@@ -279,14 +303,18 @@ html, body {
 .station-details {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    margin-bottom: 20px;
+    gap: 10px;
+    margin-bottom: 16px;
+    padding: 12px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
 }
 
 .detail-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    padding: 4px 0;
 }
 
 .detail-label {
@@ -304,8 +332,8 @@ html, body {
 .fuel-cards {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    margin-bottom: 20px;
+    gap: 10px;
+    margin-bottom: 16px;
 }
 
 .fuel-card {
@@ -380,7 +408,11 @@ html, body {
 /* Action Buttons */
 .action-buttons {
     display: flex;
-    gap: 12px;
+    gap: 10px;
+    position: sticky;
+    bottom: 0;
+    padding: 12px 0;
+    background: var(--bg-card);
 }
 
 .action-btn {
@@ -448,7 +480,7 @@ html, body {
     bottom: 0;
     left: 0;
     right: 0;
-    height: 80px;
+    height: 70px;
     padding-bottom: var(--safe-bottom);
     background: var(--bg-card);
     border-top: 1px solid var(--border-color);
@@ -847,28 +879,155 @@ html, body {
 /* ============================================
    RESPONSIVE ADJUSTMENTS
    ============================================ */
+/* ============================================
+   DESKTOP LAYOUT (≥768px)
+   ============================================ */
 @media (min-width: 768px) {
-    .bottom-sheet {
-        max-width: 480px;
-        left: 50%;
-        right: auto;
-        transform: translateX(-50%) translateY(100%);
-    }
-    
-    .bottom-sheet.active {
-        transform: translateX(-50%) translateY(0);
-    }
-    
+    /* Map takes full screen */
     #map {
+        top: 0;
+        left: 0;
+        right: 0;
         bottom: 0;
     }
-    
+
+    /* Live pulse banner - thinner on desktop */
+    .live-pulse {
+        height: 32px;
+        font-size: 12px;
+    }
+
+    /* Bottom nav becomes top horizontal bar */
     .bottom-nav {
+        top: 0;
+        bottom: auto;
+        left: 0;
+        right: 0;
+        height: 56px;
+        border-top: none;
+        border-bottom: 1px solid var(--border-color);
+        padding: 0 24px;
+        justify-content: flex-start;
+        gap: 8px;
+    }
+
+    .nav-btn {
+        flex: none;
+        flex-direction: row;
+        gap: 6px;
+        padding: 8px 16px;
+        border-radius: var(--radius-sm);
+    }
+
+    .nav-btn svg {
+        width: 18px;
+        height: 18px;
+    }
+
+    .nav-btn span {
+        font-size: 13px;
+    }
+
+    .nav-btn:hover {
+        background: var(--bg-secondary);
+    }
+
+    .nav-btn.active {
+        background: var(--accent-green-dim);
+    }
+
+    /* Auth bar moves to top-right corner */
+    .auth-bar {
+        top: 0;
+        bottom: auto;
+        right: 0;
+        left: auto;
+        width: auto;
+        border-top: none;
+        border-left: 1px solid var(--border-color);
+        border-bottom: 1px solid var(--border-color);
+        padding: 0 16px;
+        height: 56px;
+        z-index: 101;
+        background: var(--bg-card);
+    }
+
+    .auth-btn {
+        padding: 6px 14px;
+        font-size: 13px;
+    }
+
+    /* Bottom sheet becomes right sidebar */
+    .bottom-sheet {
+        top: 56px;
+        bottom: 0;
+        left: auto;
+        right: 0;
+        width: 400px;
+        max-width: 400px;
+        max-height: none;
+        border-radius: 0;
+        transform: translateX(100%);
+        box-shadow: -4px 0 20px rgba(0, 0, 0, 0.3);
+        border-left: 1px solid var(--border-color);
+    }
+
+    .bottom-sheet.active {
+        transform: translateX(0);
+    }
+
+    .sheet-handle {
         display: none;
     }
-    
-    #list-view, #alerts-view {
+
+    .sheet-content {
+        padding: 20px;
+        max-height: none;
+    }
+
+    /* List/Alerts/Electricity views become left sidebar */
+    .view-container {
+        top: 56px;
+        left: 0;
+        right: auto;
         bottom: 0;
+        width: 420px;
+        max-width: 420px;
+        border-right: 1px solid var(--border-color);
+        background: var(--bg-primary);
+    }
+
+    /* Filters grid - single column on sidebar */
+    .filters-grid {
+        grid-template-columns: 1fr;
+    }
+
+    /* Station list items - compact */
+    .station-list-item {
+        padding: 12px;
+    }
+
+    /* Install prompt - center bottom */
+    .install-prompt {
+        bottom: 20px;
+        left: 50%;
+        right: auto;
+        transform: translateX(-50%);
+        max-width: 400px;
+    }
+
+    /* Toast - top center, narrower */
+    .toast {
+        left: 50%;
+        right: auto;
+        transform: translateX(-50%);
+        max-width: 400px;
+        width: max-content;
+    }
+
+    /* Modal - centered */
+    .modal-content {
+        max-width: 400px;
     }
 }
 
@@ -1095,6 +1254,11 @@ html, body {
     z-index: 10;
     overflow-y: auto;
     padding: 16px;
+    display: none;
+}
+
+.view-container.active {
+    display: block;
 }
 
 .view-header {
@@ -1254,4 +1418,219 @@ html, body {
     float: right;
     font-size: 12px;
     color: var(--text-muted);
+}
+
+/* ============================================
+   DESKTOP LAYOUT (≥768px)
+   ============================================ */
+@media (min-width: 768px) {
+    /* Map takes full screen as background */
+    #map {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1;
+    }
+
+    /* Live Pulse - top center */
+    .live-pulse {
+        position: fixed;
+        top: 12px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 60;
+        width: auto;
+    }
+
+    /* Bottom Nav → Top Horizontal Bar */
+    .bottom-nav {
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: auto;
+        height: 56px;
+        flex-direction: row;
+        justify-content: center;
+        gap: 4px;
+        padding: 0 16px;
+        z-index: 50;
+        border-top: none;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .nav-btn {
+        flex: none;
+        flex-direction: row;
+        gap: 6px;
+        padding: 8px 16px;
+        min-width: auto;
+    }
+
+    .nav-btn svg {
+        width: 18px;
+        height: 18px;
+    }
+
+    .nav-btn span {
+        font-size: 13px;
+    }
+
+    /* Auth Bar → Top Right Corner */
+    .auth-bar {
+        top: 8px;
+        right: 16px;
+        left: auto;
+        bottom: auto;
+        z-index: 55;
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        padding: 6px 12px;
+        gap: 10px;
+    }
+
+    /* Station Sheet → Right Sidebar */
+    .bottom-sheet {
+        top: 56px;
+        right: 0;
+        left: auto;
+        bottom: 0;
+        width: 400px;
+        max-width: 90vw;
+        height: auto;
+        max-height: none;
+        border-radius: 0;
+        transform: translateX(100%);
+        transition: transform 0.3s ease;
+        z-index: 45;
+        overflow-y: auto;
+        border-left: 1px solid var(--border-color);
+        border-top: none;
+    }
+
+    .bottom-sheet.active {
+        transform: translateX(0);
+    }
+
+    .sheet-handle {
+        display: none;
+    }
+
+    .sheet-close-btn {
+        display: flex;
+    }
+
+    .sheet-content {
+        padding: 20px;
+        padding-top: 56px;
+    }
+
+    /* View Containers → Left Sidebar */
+    .view-container {
+        display: block;
+        top: 56px;
+        left: 0;
+        right: auto;
+        bottom: 0;
+        width: 420px;
+        max-width: 90vw;
+        height: auto;
+        border-radius: 0;
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+        z-index: 45;
+        border-right: 1px solid var(--border-color);
+    }
+
+    .view-container.active {
+        transform: translateX(0);
+    }
+
+    /* Station Details - desktop refinements */
+    .station-details {
+        padding: 14px;
+        gap: 12px;
+    }
+
+    .detail-row {
+        padding: 6px 0;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .detail-row:last-child {
+        border-bottom: none;
+    }
+
+    /* Fuel Cards - desktop */
+    .fuel-cards {
+        gap: 12px;
+    }
+
+    .fuel-card {
+        padding: 18px;
+    }
+
+    /* Action Buttons - sticky at bottom of sidebar */
+    .action-buttons {
+        position: sticky;
+        bottom: 0;
+        padding: 16px 0;
+        background: var(--bg-card);
+        border-top: 1px solid var(--border-color);
+        margin-top: auto;
+    }
+
+    /* Loading Overlay - full screen */
+    .loading-overlay {
+        z-index: 100;
+    }
+
+    /* Install Prompt - bottom right */
+    .install-prompt {
+        bottom: 20px;
+        right: 20px;
+        left: auto;
+        max-width: 300px;
+    }
+
+    /* Filters grid - more columns on desktop */
+    .filters-grid {
+        grid-template-columns: 1fr 1fr 1fr;
+    }
+
+    /* Station list items - wider on desktop */
+    .station-list-item {
+        padding: 14px;
+    }
+
+    /* Modal - centered on desktop */
+    .modal-overlay {
+        padding: 40px;
+    }
+
+    .modal-content {
+        max-width: 400px;
+    }
+
+    /* Auth modal - wider */
+    .auth-modal-content {
+        max-width: 420px;
+    }
+}
+
+/* Large desktop screens */
+@media (min-width: 1200px) {
+    .bottom-sheet {
+        width: 440px;
+    }
+
+    .view-container {
+        width: 460px;
+    }
+
+    .fuel-cards {
+        grid-template-columns: 1fr 1fr;
+    }
 }

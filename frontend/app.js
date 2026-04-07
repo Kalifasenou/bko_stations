@@ -822,6 +822,7 @@ function setupEventListeners() {
     });
 
     document.querySelector('.sheet-handle')?.addEventListener('click', closeStationSheet);
+    document.querySelector('#sheet-close-btn')?.addEventListener('click', closeStationSheet);
     state.map.on('click', closeStationSheet);
     elements.installBtn.addEventListener('click', installPWA);
 
@@ -992,14 +993,17 @@ async function submitSignalement(fuelType, status, comment = '') {
 function switchView(view) {
     state.currentView = view;
     
-    // Hide all views
-    document.getElementById('map').style.display = 'none';
-    document.querySelectorAll('.view-container').forEach(el => el.style.display = 'none');
+    // Hide all view containers by removing active class
+    document.querySelectorAll('.view-container').forEach(el => el.classList.remove('active'));
     
-    // Show selected view
+    const isDesktop = window.innerWidth >= 768;
+    
     switch (view) {
         case 'map':
-            document.getElementById('map').style.display = 'block';
+            // On desktop, map is always visible behind overlays
+            if (!isDesktop) {
+                document.getElementById('map').style.display = 'block';
+            }
             closeStationSheet();
             setTimeout(() => {
                 if (state.map) {
@@ -1008,15 +1012,27 @@ function switchView(view) {
             }, 0);
             break;
         case 'list':
+            if (!isDesktop) {
+                document.getElementById('map').style.display = 'none';
+            }
             showListView();
             break;
         case 'alerts':
+            if (!isDesktop) {
+                document.getElementById('map').style.display = 'none';
+            }
             showAlertsView();
             break;
         case 'electricity':
+            if (!isDesktop) {
+                document.getElementById('map').style.display = 'none';
+            }
             showElectricityView();
             break;
         case 'add-station':
+            if (!isDesktop) {
+                document.getElementById('map').style.display = 'none';
+            }
             showAddStationView();
             break;
     }
@@ -1086,7 +1102,7 @@ function showListView() {
 
     renderStationList(applyClientSearchFilter(state.stations));
     updateSyncIndicator();
-    listView.style.display = 'block';
+    listView.classList.add('active');
 }
 
 function renderStationList(filteredStations = null) {
@@ -1170,7 +1186,7 @@ function showAlertsView() {
         });
     
     // Show alerts
-    alertsView.style.display = 'block';
+    alertsView.classList.add('active');
 }
 
 function selectStationById(id) {
@@ -1393,7 +1409,7 @@ function showElectricityView() {
     if (sortSelect) sortSelect.value = state.electricityFilters.sortBy;
 
     refreshElectricityView(false);
-    electricityView.style.display = 'block';
+    electricityView.classList.add('active');
 }
 
 function focusElectricityZone(_id, lat, lon) {
@@ -1450,7 +1466,7 @@ function showAddStationView() {
         form.addEventListener('submit', handleAddStationSubmit);
     }
 
-    addView.style.display = 'block';
+    addView.classList.add('active');
 }
 
 function parseCoordinate(value) {
