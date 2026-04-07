@@ -58,7 +58,7 @@ html, body {
    ============================================ */
 #map {
     position: fixed;
-    top: 0;
+    top: 56px;
     left: 0;
     right: 0;
     bottom: 0;
@@ -177,37 +177,38 @@ html, body {
 }
 
 /* ============================================
-   BOTTOM SHEET - Station Details
+   BOTTOM SHEET - Station Details (Desktop default: right sidebar)
    ============================================ */
 .bottom-sheet {
     position: fixed;
-    bottom: 0;
-    left: 0;
+    top: 56px;
     right: 0;
+    left: auto;
+    bottom: 0;
+    width: 400px;
+    max-width: 90vw;
     background: var(--bg-card);
-    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-    z-index: 50;
-    transform: translateY(100%);
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    max-height: 50vh;
-    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+    border-radius: 0;
+    z-index: 45;
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+    max-height: none;
+    height: auto;
+    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.3);
+    border-left: 1px solid var(--border-color);
+    overflow-y: auto;
 }
 
 .bottom-sheet.active {
-    transform: translateY(0);
+    transform: translateX(0);
 }
 
 .sheet-handle {
-    width: 40px;
-    height: 4px;
-    background: var(--text-muted);
-    border-radius: 2px;
-    margin: 12px auto;
-    opacity: 0.5;
+    display: none;
 }
 
 .sheet-close-btn {
-    display: none;
+    display: flex;
     position: absolute;
     top: 12px;
     right: 12px;
@@ -224,15 +225,10 @@ html, body {
     transition: all 0.2s ease;
 }
 
-.sheet-close-btn:hover {
-    background: var(--bg-card);
-    color: var(--text-primary);
-    border-color: var(--accent-red);
-}
-
 .sheet-content {
-    padding: 0 20px 20px;
-    max-height: calc(60vh - 28px);
+    padding: 20px;
+    padding-top: 56px;
+    max-height: none;
     overflow-y: auto;
 }
 
@@ -473,51 +469,55 @@ html, body {
 }
 
 /* ============================================
-   BOTTOM NAVIGATION
+   BOTTOM NAVIGATION (Desktop default: top bar)
    ============================================ */
 .bottom-nav {
     position: fixed;
-    bottom: 0;
+    top: 0;
     left: 0;
     right: 0;
-    height: 70px;
-    padding-bottom: var(--safe-bottom);
+    height: 56px;
     background: var(--bg-card);
-    border-top: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
     display: flex;
-    justify-content: space-around;
+    justify-content: center;
     align-items: center;
-    z-index: 100;
+    gap: 4px;
+    padding: 0 16px;
+    z-index: 50;
 }
 
 .nav-btn {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
     justify-content: center;
-    gap: 4px;
-    padding: 8px 24px;
+    gap: 6px;
+    padding: 8px 16px;
     background: none;
     border: none;
-    color: var(--text-muted);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
     cursor: pointer;
     transition: all 0.2s ease;
-    flex: 1;
+    flex: none;
+    min-width: auto;
 }
 
 .nav-btn svg {
-    width: 24px;
-    height: 24px;
+    width: 18px;
+    height: 18px;
     transition: all 0.2s ease;
 }
 
 .nav-btn span {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 500;
 }
 
 .nav-btn.active {
     color: var(--accent-green);
+    background: var(--accent-green-dim);
 }
 
 .nav-btn.active svg {
@@ -526,6 +526,7 @@ html, body {
 
 .nav-btn:hover {
     color: var(--text-primary);
+    background: var(--bg-secondary);
 }
 
 /* ============================================
@@ -664,10 +665,9 @@ html, body {
 }
 
 /* ============================================
-   LIST VIEW (Hidden by default)
+   LIST VIEW
    ============================================ */
 #list-view {
-    display: none;
     position: fixed;
     top: 40px;
     left: 0;
@@ -680,7 +680,7 @@ html, body {
 }
 
 #list-view.active {
-    display: block;
+    /* Inherits .view-container.active transform */
 }
 
 .station-list-item {
@@ -736,10 +736,9 @@ html, body {
 }
 
 /* ============================================
-   ALERTS VIEW (Hidden by default)
+   ALERTS VIEW
    ============================================ */
 #alerts-view {
-    display: none;
     position: fixed;
     top: 40px;
     left: 0;
@@ -752,14 +751,13 @@ html, body {
 }
 
 #alerts-view.active {
-    display: block;
+    /* Inherits .view-container.active transform */
 }
 
 /* ============================================
-   ADD STATION VIEW (Hidden by default)
+   ADD STATION VIEW
    ============================================ */
 #add-station-view {
-    display: none;
     position: fixed;
     top: 40px;
     left: 0;
@@ -874,161 +872,6 @@ html, body {
 .alert-message {
     font-size: 14px;
     color: var(--text-secondary);
-}
-
-/* ============================================
-   RESPONSIVE ADJUSTMENTS
-   ============================================ */
-/* ============================================
-   DESKTOP LAYOUT (≥768px)
-   ============================================ */
-@media (min-width: 768px) {
-    /* Map takes full screen */
-    #map {
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-    }
-
-    /* Live pulse banner - thinner on desktop */
-    .live-pulse {
-        height: 32px;
-        font-size: 12px;
-    }
-
-    /* Bottom nav becomes top horizontal bar */
-    .bottom-nav {
-        top: 0;
-        bottom: auto;
-        left: 0;
-        right: 0;
-        height: 56px;
-        border-top: none;
-        border-bottom: 1px solid var(--border-color);
-        padding: 0 24px;
-        justify-content: flex-start;
-        gap: 8px;
-    }
-
-    .nav-btn {
-        flex: none;
-        flex-direction: row;
-        gap: 6px;
-        padding: 8px 16px;
-        border-radius: var(--radius-sm);
-    }
-
-    .nav-btn svg {
-        width: 18px;
-        height: 18px;
-    }
-
-    .nav-btn span {
-        font-size: 13px;
-    }
-
-    .nav-btn:hover {
-        background: var(--bg-secondary);
-    }
-
-    .nav-btn.active {
-        background: var(--accent-green-dim);
-    }
-
-    /* Auth bar moves to top-right corner */
-    .auth-bar {
-        top: 0;
-        bottom: auto;
-        right: 0;
-        left: auto;
-        width: auto;
-        border-top: none;
-        border-left: 1px solid var(--border-color);
-        border-bottom: 1px solid var(--border-color);
-        padding: 0 16px;
-        height: 56px;
-        z-index: 101;
-        background: var(--bg-card);
-    }
-
-    .auth-btn {
-        padding: 6px 14px;
-        font-size: 13px;
-    }
-
-    /* Bottom sheet becomes right sidebar */
-    .bottom-sheet {
-        top: 56px;
-        bottom: 0;
-        left: auto;
-        right: 0;
-        width: 400px;
-        max-width: 400px;
-        max-height: none;
-        border-radius: 0;
-        transform: translateX(100%);
-        box-shadow: -4px 0 20px rgba(0, 0, 0, 0.3);
-        border-left: 1px solid var(--border-color);
-    }
-
-    .bottom-sheet.active {
-        transform: translateX(0);
-    }
-
-    .sheet-handle {
-        display: none;
-    }
-
-    .sheet-content {
-        padding: 20px;
-        max-height: none;
-    }
-
-    /* List/Alerts/Electricity views become left sidebar */
-    .view-container {
-        top: 56px;
-        left: 0;
-        right: auto;
-        bottom: 0;
-        width: 420px;
-        max-width: 420px;
-        border-right: 1px solid var(--border-color);
-        background: var(--bg-primary);
-    }
-
-    /* Filters grid - single column on sidebar */
-    .filters-grid {
-        grid-template-columns: 1fr;
-    }
-
-    /* Station list items - compact */
-    .station-list-item {
-        padding: 12px;
-    }
-
-    /* Install prompt - center bottom */
-    .install-prompt {
-        bottom: 20px;
-        left: 50%;
-        right: auto;
-        transform: translateX(-50%);
-        max-width: 400px;
-    }
-
-    /* Toast - top center, narrower */
-    .toast {
-        left: 50%;
-        right: auto;
-        transform: translateX(-50%);
-        max-width: 400px;
-        width: max-content;
-    }
-
-    /* Modal - centered */
-    .modal-content {
-        max-width: 400px;
-    }
 }
 
 /* ============================================
@@ -1198,22 +1041,25 @@ html, body {
 }
 
 /* ============================================
-   AUTH BAR
+   AUTH BAR (Desktop default: top-right corner)
    ============================================ */
 .auth-bar {
     position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 80px;
-    z-index: 40;
+    top: 8px;
+    right: 16px;
+    left: auto;
+    bottom: auto;
+    z-index: 55;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 10px 16px;
-    background: var(--bg-overlay);
-    border-top: 1px solid var(--border-color);
+    padding: 6px 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
     color: var(--text-secondary);
     font-size: 13px;
+    gap: 10px;
 }
 
 .auth-btn {
@@ -1221,8 +1067,8 @@ html, body {
     color: var(--text-primary);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
-    padding: 8px 10px;
-    font-size: 12px;
+    padding: 6px 14px;
+    font-size: 13px;
     cursor: pointer;
 }
 
@@ -1231,7 +1077,7 @@ html, body {
 }
 
 .auth-modal-content {
-    max-width: 360px;
+    max-width: 420px;
 }
 
 .auth-form {
@@ -1241,24 +1087,56 @@ html, body {
     margin-bottom: 12px;
 }
 
+/* Auth Feedback */
+.auth-feedback {
+    padding: 12px 16px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 10px;
+    text-align: center;
+}
+
+.auth-feedback.error {
+    background: var(--accent-red-dim);
+    color: var(--accent-red);
+    border: 1px solid var(--accent-red);
+}
+
+.auth-feedback.success {
+    background: var(--accent-green-dim);
+    color: var(--accent-green);
+    border: 1px solid var(--accent-green);
+}
+
+.form-submit-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
 /* ============================================
    VIEW CONTAINERS
    ============================================ */
 .view-container {
     position: fixed;
-    top: 40px;
+    top: 56px;
     left: 0;
-    right: 0;
-    bottom: 120px;
+    right: auto;
+    bottom: 0;
+    width: 420px;
+    max-width: 90vw;
+    height: auto;
     background: var(--bg-primary);
-    z-index: 10;
+    z-index: 45;
     overflow-y: auto;
     padding: 16px;
-    display: none;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+    border-right: 1px solid var(--border-color);
 }
 
 .view-container.active {
-    display: block;
+    transform: translateX(0);
 }
 
 .view-header {
@@ -1421,10 +1299,10 @@ html, body {
 }
 
 /* ============================================
-   DESKTOP LAYOUT (≥768px)
+   MOBILE LAYOUT (<768px) - overrides desktop defaults
    ============================================ */
-@media (min-width: 768px) {
-    /* Map takes full screen as background */
+@media (max-width: 767px) {
+    /* Map takes full screen */
     #map {
         position: fixed;
         top: 0;
@@ -1444,179 +1322,132 @@ html, body {
         width: auto;
     }
 
-    /* Bottom Nav → Top Horizontal Bar */
+    /* Bottom Nav → Bottom Bar */
     .bottom-nav {
-        top: 0;
+        top: auto;
         left: 0;
         right: 0;
-        bottom: auto;
-        height: 56px;
+        bottom: 0;
+        height: 64px;
         flex-direction: row;
-        justify-content: center;
-        gap: 4px;
-        padding: 0 16px;
+        justify-content: space-around;
+        gap: 0;
+        padding: 0 8px;
         z-index: 50;
-        border-top: none;
-        border-bottom: 1px solid var(--border-color);
+        border-top: 1px solid var(--border-color);
+        border-bottom: none;
     }
 
     .nav-btn {
-        flex: none;
-        flex-direction: row;
-        gap: 6px;
-        padding: 8px 16px;
+        flex: 1;
+        flex-direction: column;
+        gap: 2px;
+        padding: 6px 4px;
         min-width: auto;
     }
 
     .nav-btn svg {
-        width: 18px;
-        height: 18px;
+        width: 22px;
+        height: 22px;
     }
 
     .nav-btn span {
-        font-size: 13px;
+        font-size: 10px;
     }
 
-    /* Auth Bar → Top Right Corner */
+    /* Auth Bar → Bottom bar above nav */
     .auth-bar {
-        top: 8px;
-        right: 16px;
-        left: auto;
-        bottom: auto;
+        top: auto;
+        right: 0;
+        left: 0;
+        bottom: 64px;
         z-index: 55;
         background: var(--bg-card);
-        border: 1px solid var(--border-color);
-        border-radius: var(--radius-md);
-        padding: 6px 12px;
-        gap: 10px;
+        border: none;
+        border-top: 1px solid var(--border-color);
+        border-radius: 0;
+        padding: 8px 16px;
+        gap: 8px;
+        justify-content: center;
     }
 
-    /* Station Sheet → Right Sidebar */
+    /* Station Sheet → Bottom Sheet (slides up) */
     .bottom-sheet {
-        top: 56px;
+        top: auto;
         right: 0;
-        left: auto;
+        left: 0;
         bottom: 0;
-        width: 400px;
-        max-width: 90vw;
-        height: auto;
-        max-height: none;
-        border-radius: 0;
-        transform: translateX(100%);
+        width: 100%;
+        max-width: none;
+        height: 70vh;
+        max-height: 70vh;
+        border-radius: 16px 16px 0 0;
+        transform: translateY(100%);
         transition: transform 0.3s ease;
         z-index: 45;
         overflow-y: auto;
-        border-left: 1px solid var(--border-color);
-        border-top: none;
+        border-left: none;
+        border-top: 1px solid var(--border-color);
     }
 
     .bottom-sheet.active {
-        transform: translateX(0);
+        transform: translateY(0);
     }
 
     .sheet-handle {
-        display: none;
-    }
-
-    .sheet-close-btn {
         display: flex;
     }
 
-    .sheet-content {
-        padding: 20px;
-        padding-top: 56px;
+    .sheet-close-btn {
+        display: none;
     }
 
-    /* View Containers → Left Sidebar */
+    .sheet-content {
+        padding: 0 20px 20px;
+        padding-top: 0;
+        max-height: calc(70vh - 28px);
+    }
+
+    /* View Containers → Full screen overlay */
     .view-container {
-        display: block;
-        top: 56px;
+        top: 0;
         left: 0;
-        right: auto;
+        right: 0;
         bottom: 0;
-        width: 420px;
-        max-width: 90vw;
-        height: auto;
-        border-radius: 0;
-        transform: translateX(-100%);
-        transition: transform 0.3s ease;
-        z-index: 45;
-        border-right: 1px solid var(--border-color);
+        width: 100%;
+        max-width: none;
+        height: 100%;
+        transform: translateX(100%);
+        border-right: none;
+        padding-bottom: 140px;
     }
 
     .view-container.active {
         transform: translateX(0);
     }
 
-    /* Station Details - desktop refinements */
-    .station-details {
-        padding: 14px;
-        gap: 12px;
-    }
-
-    .detail-row {
-        padding: 6px 0;
-        border-bottom: 1px solid var(--border-color);
-    }
-
-    .detail-row:last-child {
-        border-bottom: none;
-    }
-
-    /* Fuel Cards - desktop */
-    .fuel-cards {
-        gap: 12px;
-    }
-
-    .fuel-card {
-        padding: 18px;
-    }
-
-    /* Action Buttons - sticky at bottom of sidebar */
-    .action-buttons {
-        position: sticky;
-        bottom: 0;
-        padding: 16px 0;
-        background: var(--bg-card);
-        border-top: 1px solid var(--border-color);
-        margin-top: auto;
-    }
-
-    /* Loading Overlay - full screen */
-    .loading-overlay {
-        z-index: 100;
-    }
-
-    /* Install Prompt - bottom right */
-    .install-prompt {
-        bottom: 20px;
-        right: 20px;
-        left: auto;
-        max-width: 300px;
-    }
-
-    /* Filters grid - more columns on desktop */
-    .filters-grid {
-        grid-template-columns: 1fr 1fr 1fr;
-    }
-
-    /* Station list items - wider on desktop */
+    /* Station list items - mobile padding */
     .station-list-item {
-        padding: 14px;
+        padding: 10px;
     }
 
-    /* Modal - centered on desktop */
+    /* Modal - full screen on mobile */
     .modal-overlay {
-        padding: 40px;
+        padding: 16px;
     }
 
     .modal-content {
-        max-width: 400px;
+        max-width: none;
     }
 
-    /* Auth modal - wider */
+    /* Auth modal - full screen */
     .auth-modal-content {
-        max-width: 420px;
+        max-width: none;
+    }
+
+    /* Filters grid - 2 columns on mobile */
+    .filters-grid {
+        grid-template-columns: 1fr 1fr;
     }
 }
 

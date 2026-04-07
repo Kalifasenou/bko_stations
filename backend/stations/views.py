@@ -1046,9 +1046,10 @@ def signalements_heatmap(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def register_user(request):
-    """Créer un compte utilisateur et retourner des tokens JWT"""
+    """Créer un compte utilisateur avec numéro de téléphone et retourner des tokens JWT"""
     username = str(request.data.get('username', '')).strip()
     password = str(request.data.get('password', '')).strip()
+    phone = str(request.data.get('phone', '')).strip()
 
     if len(username) < 3:
         return Response(
@@ -1062,6 +1063,12 @@ def register_user(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
+    if not phone or len(phone) < 6:
+        return Response(
+            {'error': 'Le numéro de téléphone est requis et doit contenir au moins 6 chiffres'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
     User = get_user_model()
 
     if User.objects.filter(username=username).exists():
@@ -1070,14 +1077,25 @@ def register_user(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
+    # Vérifier l'unicité du numéro de téléphone
+    from .models import UserProfile
+    if UserProfile.objects.filter(phone=phone).exists():
+        return Response(
+            {'error': 'Ce numéro de téléphone est déjà utilisé par un autre compte'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
     user = User.objects.create_user(username=username, password=password)
+    UserProfile.objects.create(user=user, phone=phone)
+
     refresh = RefreshToken.for_user(user)
 
     return Response(
         {
-            'user': {'id': user.id, 'username': user.username},
+            'user': {'id': user.id, 'username': user.username, 'phone': phone},
             'refresh': str(refresh),
             'access': str(refresh.access_token),
+            'message': 'Compte créé avec succès !',
         },
         status=status.HTTP_201_CREATED
     )

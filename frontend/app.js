@@ -518,12 +518,14 @@ function showAuthModal(mode = 'login') {
     modal.innerHTML = `
         <div class="modal-content auth-modal-content">
             <h3>${isLogin ? 'Connexion' : 'Créer un compte'}</h3>
+            <div id="auth-feedback" class="auth-feedback" style="display:none;"></div>
             <form id="auth-form" class="auth-form">
                 <input id="auth-username" class="form-input" type="text" name="username" minlength="3" maxlength="150" required placeholder="Nom d'utilisateur">
+                ${!isLogin ? '<input id="auth-phone" class="form-input" type="tel" name="phone" minlength="6" required placeholder="Numéro de téléphone (ex: 70000000)">' : ''}
                 <input id="auth-password" class="form-input" type="password" name="password" minlength="8" required placeholder="Mot de passe">
                 <button id="auth-submit" class="form-submit-btn" type="submit">${isLogin ? 'Se connecter' : 'Créer le compte'}</button>
             </form>
-            <button id="auth-switch" class="modal-close" type="button">${isLogin ? 'Créer un compte' : 'J’ai déjà un compte'}</button>
+            <button id="auth-switch" class="modal-close" type="button">${isLogin ? 'Créer un compte' : 'J\u2019ai déjà un compte'}</button>
             <button id="auth-close" class="modal-close" type="button">Fermer</button>
         </div>
     `;
@@ -531,26 +533,59 @@ function showAuthModal(mode = 'login') {
     const form = modal.querySelector('#auth-form');
     const authSwitch = modal.querySelector('#auth-switch');
     const authClose = modal.querySelector('#auth-close');
+    const feedback = modal.querySelector('#auth-feedback');
+
+    function showFeedback(message, type) {
+        feedback.textContent = message;
+        feedback.className = `auth-feedback ${type}`;
+        feedback.style.display = 'block';
+    }
+
+    function clearFeedback() {
+        feedback.style.display = 'none';
+        feedback.textContent = '';
+    }
+
+    function setLoading(loading) {
+        const btn = form.querySelector('#auth-submit');
+        if (loading) {
+            btn.disabled = true;
+            btn.textContent = 'Traitement en cours...';
+        } else {
+            btn.disabled = false;
+            btn.textContent = isLogin ? 'Se connecter' : 'Créer le compte';
+        }
+    }
 
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
+        clearFeedback();
         const username = String(form.username.value || '').trim();
         const password = String(form.password.value || '').trim();
+        const phone = form.phone ? String(form.phone.value || '').trim() : '';
 
         if (!username || !password) {
-            showToast('Identifiants requis', 'error');
+            showFeedback('Veuillez remplir tous les champs', 'error');
             return;
         }
 
+        if (!isLogin && !phone) {
+            showFeedback('Le numéro de téléphone est requis', 'error');
+            return;
+        }
+
+        setLoading(true);
         try {
             if (isLogin) {
                 await login(username, password);
             } else {
-                await register(username, password);
+                await register(username, password, phone);
             }
             modal.style.display = 'none';
         } catch (error) {
-            showToast(error.message, 'error');
+            showFeedback(error.message, 'error');
+        } finally {
+            setLoading(false);
         }
     });
 
@@ -588,13 +623,13 @@ async function login(username, password) {
     showToast('Connexion réussie', 'success');
 }
 
-async function register(username, password) {
+async function register(username, password, phone) {
     const response = await fetch(`${CONFIG.API_BASE_URL}/auth/register/`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username, password, phone }),
     });
 
     const payload = await response.json();
@@ -604,11 +639,11 @@ async function register(username, password) {
     }
 
     state.authToken = payload.access;
-    state.currentUser = { username: payload.user?.username || username };
+    state.currentUser = { username: payload.user?.username || username, phone: payload.user?.phone || phone };
     localStorage.setItem(AUTH_STORAGE_KEYS.TOKEN, payload.access);
     localStorage.setItem(AUTH_STORAGE_KEYS.USERNAME, state.currentUser.username);
     updateAuthUI();
-    showToast('Compte créé et connecté', 'success');
+    showToast('Compte créé avec succès ! Connecté.', 'success');
 }
 
 // ============================================

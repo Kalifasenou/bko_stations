@@ -327,3 +327,29 @@ class ElectriciteSignalement(models.Model):
 
     def __str__(self):
         return f"{self.zone.name} - Électricité: {self.status} ({self.approval_count} confirmations)"
+
+
+class UserProfile(models.Model):
+    """Profil utilisateur étendu avec numéro de téléphone"""
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='profile',
+        verbose_name="Utilisateur"
+    )
+    phone = models.CharField(
+        max_length=20,
+        unique=True,
+        blank=True,
+        null=True,
+        verbose_name="Numéro de téléphone"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Profil utilisateur"
+        verbose_name_plural = "Profils utilisateurs"
+
+    def __str__(self):
+        return f"{self.user.username} - {self.phone or 'Pas de téléphone'}"
