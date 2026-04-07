@@ -13,7 +13,7 @@ const API_CONFIGS = {
     'localhost': 'http://localhost:8000/api',
     '127.0.0.1': 'http://localhost:8000/api',
     // Production Render
-    'bko-stations.onrender.com': 'https://bko-stations.onrender.com/api',
+    'bko-station-frontend.onrender.com': 'https://bko-station-backend.onrender.com/api',
     // Autres environnements - utilise l'hôte actuel
 };
 
