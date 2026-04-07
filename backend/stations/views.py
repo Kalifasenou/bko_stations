@@ -1046,14 +1046,15 @@ def signalements_heatmap(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def register_user(request):
-    """Créer un compte utilisateur avec numéro de téléphone et retourner des tokens JWT"""
-    username = str(request.data.get('username', '')).strip()
-    password = str(request.data.get('password', '')).strip()
+    """Créer un compte utilisateur avec numéro de téléphone et retourner des tokens JWT.
+    Le numéro de téléphone est l'identifiant unique."""
     phone = str(request.data.get('phone', '')).strip()
+    password = str(request.data.get('password', '')).strip()
+    username = str(request.data.get('username', '')).strip()
 
-    if len(username) < 3:
+    if not phone or len(phone) < 6:
         return Response(
-            {'error': "Le nom d'utilisateur doit contenir au moins 3 caractères"},
+            {'error': 'Le numéro de téléphone est requis et doit contenir au moins 6 chiffres'},
             status=status.HTTP_400_BAD_REQUEST
         )
 
@@ -1063,25 +1064,23 @@ def register_user(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    if not phone or len(phone) < 6:
-        return Response(
-            {'error': 'Le numéro de téléphone est requis et doit contenir au moins 6 chiffres'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+    if not username:
+        username = phone  # Use phone as username if not provided
 
     User = get_user_model()
-
-    if User.objects.filter(username=username).exists():
-        return Response(
-            {'error': "Ce nom d'utilisateur existe déjà"},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
-    # Vérifier l'unicité du numéro de téléphone
     from .models import UserProfile
+
+    # Vérifier l'unicité du numéro de téléphone (identifiant unique)
     if UserProfile.objects.filter(phone=phone).exists():
         return Response(
             {'error': 'Ce numéro de téléphone est déjà utilisé par un autre compte'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Vérifier si le username existe déjà
+    if User.objects.filter(username=username).exists():
+        return Response(
+            {'error': "Ce nom d'utilisateur existe déjà"},
             status=status.HTTP_400_BAD_REQUEST
         )
 
@@ -1098,6 +1097,60 @@ def register_user(request):
             'message': 'Compte créé avec succès !',
         },
         status=status.HTTP_201_CREATED
+    )
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def login_user(request):
+    """Authentifier un utilisateur par téléphone (ou username) + mot de passe."""
+    identifier = str(request.data.get('identifier', '')).strip()
+    password = str(request.data.get('password', '')).strip()
+
+    if not identifier or not password:
+        return Response(
+            {'error': 'Veuillez fournir un identifiant (téléphone) et un mot de passe'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    from django.contrib.auth import authenticate
+    from .models import UserProfile
+
+    user = None
+
+    # Essayer par téléphone d'abord
+    if identifier.isdigit():
+        profile = UserProfile.objects.select_related('user').filter(phone=identifier).first()
+        if profile:
+            user = authenticate(request, username=profile.user.username, password=password)
+    else:
+        # Essayer par username
+        user = authenticate(request, username=identifier, password=password)
+
+    if user is None:
+        return Response(
+            {'error': 'Identifiant ou mot de passe incorrect'},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+
+    if not user.is_active:
+        return Response(
+            {'error': 'Ce compte est désactivé'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    refresh = RefreshToken.for_user(user)
+    phone = getattr(user, 'profile', None)
+    phone_value = phone.phone if phone else ''
+
+    return Response(
+        {
+            'user': {'id': user.id, 'username': user.username, 'phone': phone_value},
+            'refresh': str(refresh),
+            'access': str(refresh.access_token),
+            'message': 'Connexion réussie',
+        },
+        status=status.HTTP_200_OK
     )
 
 

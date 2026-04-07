@@ -351,3 +351,9 @@ FEATURES = {
     'ENABLE_NEARBY_SEARCH': True,
     'ENABLE_HEATMAP': True,
 }
+
+# Custom authentication backend (phone or username)
+AUTHENTICATION_BACKENDS = [
+    'stations.auth_backends.PhoneOrUsernameAuthBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]

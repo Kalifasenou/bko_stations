@@ -447,7 +447,10 @@ function closeStationSheet() {
 function initAuth() {
     state.authToken = localStorage.getItem(AUTH_STORAGE_KEYS.TOKEN);
     const savedUsername = localStorage.getItem(AUTH_STORAGE_KEYS.USERNAME);
-    state.currentUser = savedUsername ? { username: savedUsername } : null;
+    const savedPhone = localStorage.getItem('bko_auth_phone');
+    state.currentUser = savedUsername
+        ? { username: savedUsername, phone: savedPhone || '' }
+        : null;
 
     if (elements.authToggle) {
         elements.authToggle.addEventListener('click', () => {
@@ -466,9 +469,12 @@ function updateAuthUI() {
     const isAuthenticated = Boolean(state.authToken);
 
     if (elements.authInfo) {
-        elements.authInfo.textContent = isAuthenticated
-            ? `Connecté: ${state.currentUser?.username || 'utilisateur'}`
-            : 'Mode invité';
+        if (isAuthenticated) {
+            const display = state.currentUser?.phone || state.currentUser?.username || 'utilisateur';
+            elements.authInfo.textContent = `Connecté: ${display}`;
+        } else {
+            elements.authInfo.textContent = 'Mode invité';
+        }
     }
 
     if (elements.authToggle) {
@@ -520,9 +526,12 @@ function showAuthModal(mode = 'login') {
             <h3>${isLogin ? 'Connexion' : 'Créer un compte'}</h3>
             <div id="auth-feedback" class="auth-feedback" style="display:none;"></div>
             <form id="auth-form" class="auth-form">
-                <input id="auth-username" class="form-input" type="text" name="username" minlength="3" maxlength="150" required placeholder="Nom d'utilisateur">
-                ${!isLogin ? '<input id="auth-phone" class="form-input" type="tel" name="phone" minlength="6" required placeholder="Numéro de téléphone (ex: 70000000)">' : ''}
+                ${isLogin
+                    ? '<input id="auth-phone" class="form-input" type="tel" name="identifier" minlength="6" required placeholder="Numéro de téléphone (ex: 70000000)">'
+                    : '<input id="auth-username" class="form-input" type="text" name="username" minlength="3" maxlength="150" required placeholder="Nom d\'utilisateur">'
+                }
                 <input id="auth-password" class="form-input" type="password" name="password" minlength="8" required placeholder="Mot de passe">
+                ${!isLogin ? '<input id="auth-phone-reg" class="form-input" type="tel" name="phone" minlength="6" required placeholder="Numéro de téléphone (ex: 70000000)">' : ''}
                 <button id="auth-submit" class="form-submit-btn" type="submit">${isLogin ? 'Se connecter' : 'Créer le compte'}</button>
             </form>
             <button id="auth-switch" class="modal-close" type="button">${isLogin ? 'Créer un compte' : 'J\u2019ai déjà un compte'}</button>
@@ -539,6 +548,8 @@ function showAuthModal(mode = 'login') {
         feedback.textContent = message;
         feedback.className = `auth-feedback ${type}`;
         feedback.style.display = 'block';
+        // Scroll feedback into view so user sees it
+        feedback.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
     function clearFeedback() {
@@ -560,24 +571,28 @@ function showAuthModal(mode = 'login') {
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
         clearFeedback();
-        const username = String(form.username.value || '').trim();
+
+        const identifier = form.identifier ? String(form.identifier.value || '').trim() : '';
         const password = String(form.password.value || '').trim();
+        const username = form.username ? String(form.username.value || '').trim() : '';
         const phone = form.phone ? String(form.phone.value || '').trim() : '';
 
-        if (!username || !password) {
-            showFeedback('Veuillez remplir tous les champs', 'error');
-            return;
-        }
-
-        if (!isLogin && !phone) {
-            showFeedback('Le numéro de téléphone est requis', 'error');
-            return;
+        if (isLogin) {
+            if (!identifier || !password) {
+                showFeedback('Veuillez saisir votre numéro de téléphone et votre mot de passe', 'error');
+                return;
+            }
+        } else {
+            if (!username || !password || !phone) {
+                showFeedback('Veuillez remplir tous les champs', 'error');
+                return;
+            }
         }
 
         setLoading(true);
         try {
             if (isLogin) {
-                await login(username, password);
+                await login(identifier, password);
             } else {
                 await register(username, password, phone);
             }
@@ -600,25 +615,30 @@ function showAuthModal(mode = 'login') {
     modal.style.display = 'flex';
 }
 
-async function login(username, password) {
-    const response = await fetch(`${CONFIG.API_BASE_URL}/auth/token/`, {
+async function login(identifier, password) {
+    const response = await fetch(`${CONFIG.API_BASE_URL}/auth/login/`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ identifier, password }),
     });
 
     const payload = await response.json();
 
     if (!response.ok || !payload.access) {
-        throw new Error(payload.detail || 'Connexion impossible');
+        throw new Error(payload.error || 'Identifiant ou mot de passe incorrect');
     }
 
     state.authToken = payload.access;
-    state.currentUser = { username };
+    state.currentUser = {
+        id: payload.user?.id,
+        username: payload.user?.username || identifier,
+        phone: payload.user?.phone || identifier,
+    };
     localStorage.setItem(AUTH_STORAGE_KEYS.TOKEN, payload.access);
-    localStorage.setItem(AUTH_STORAGE_KEYS.USERNAME, username);
+    localStorage.setItem(AUTH_STORAGE_KEYS.USERNAME, state.currentUser.username);
+    localStorage.setItem('bko_auth_phone', state.currentUser.phone);
     updateAuthUI();
     showToast('Connexion réussie', 'success');
 }
@@ -639,9 +659,14 @@ async function register(username, password, phone) {
     }
 
     state.authToken = payload.access;
-    state.currentUser = { username: payload.user?.username || username, phone: payload.user?.phone || phone };
+    state.currentUser = {
+        id: payload.user?.id,
+        username: payload.user?.username || username,
+        phone: payload.user?.phone || phone,
+    };
     localStorage.setItem(AUTH_STORAGE_KEYS.TOKEN, payload.access);
     localStorage.setItem(AUTH_STORAGE_KEYS.USERNAME, state.currentUser.username);
+    localStorage.setItem('bko_auth_phone', state.currentUser.phone);
     updateAuthUI();
     showToast('Compte créé avec succès ! Connecté.', 'success');
 }

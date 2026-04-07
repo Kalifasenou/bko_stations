@@ -21,6 +21,7 @@ from .views import (
     electricity_timeline,
     electricity_statistics,
     register_user,
+    login_user,
 )
 
 router = DefaultRouter()
@@ -30,8 +31,9 @@ router.register(r'zones-electriques', ZoneElectriqueViewSet, basename='zone-elec
 router.register(r'electricite-signalements', ElectriciteSignalementViewSet, basename='electricite-signalement')
 
 urlpatterns = [
-    # Auth endpoint
+    # Auth endpoints
     path('auth/register/', register_user, name='register-user'),
+    path('auth/login/', login_user, name='login-user'),
     # Health check endpoint
     path('health/', health_check, name='health-check'),
     # Statistics endpoints

@@ -1,5 +1,7 @@
 from django.contrib import admin
-from .models import Station, Signalement, ZoneElectrique, ElectriciteSignalement
+from django.contrib.auth.admin import UserAdmin
+from django.contrib.auth.models import User
+from .models import Station, Signalement, ZoneElectrique, ElectriciteSignalement, UserProfile
 
 
 @admin.register(Station)
@@ -112,3 +114,39 @@ class SignalementAdmin(admin.ModelAdmin):
 
 # Add inline to Station admin
 StationAdmin.inlines = [SignalementInline]
+
+
+class UserProfileInline(admin.StackedInline):
+    """Inline admin for UserProfile in User"""
+    model = UserProfile
+    can_delete = False
+    verbose_name_plural = 'Profil utilisateur'
+    fields = ['phone', 'created_at', 'updated_at']
+    readonly_fields = ['created_at', 'updated_at']
+
+
+class CustomUserAdmin(UserAdmin):
+    """Custom User admin with phone number inline"""
+    inlines = [UserProfileInline]
+    list_display = ['username', 'email', 'get_phone', 'is_staff', 'is_active', 'date_joined']
+    list_filter = ['is_staff', 'is_active']
+    search_fields = ['username', 'email', 'profile__phone']
+
+    def get_phone(self, obj):
+        try:
+            return obj.profile.phone
+        except UserProfile.DoesNotExist:
+            return '-'
+    get_phone.short_description = 'Téléphone'
+
+
+# Re-register UserAdmin with custom admin
+admin.site.unregister(User)
+admin.site.register(User, CustomUserAdmin)
+
+
+@admin.register(UserProfile)
+class UserProfileAdmin(admin.ModelAdmin):
+    list_display = ['user', 'phone', 'created_at']
+    search_fields = ['user__username', 'phone']
+    readonly_fields = ['created_at', 'updated_at']
