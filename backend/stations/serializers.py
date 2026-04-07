@@ -206,7 +206,14 @@ class StationSerializer(serializers.ModelSerializer):
     def get_distance(self, obj):
         """Retourne la distance si l'utilisateur a fourni sa position"""
         return getattr(obj, 'distance', None)
-
+    
+    
+    def get_confidence_score(self, obj):
+        return obj.get_confidence_score()
+    
+    
+    def get_has_conflicting_reports(self, obj):
+        return obj.has_conflicting_recent_reports()
     def validate(self, attrs):
         """Validation globale de la station"""
         lat = attrs.get('latitude')
