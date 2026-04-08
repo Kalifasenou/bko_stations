@@ -37,12 +37,8 @@ if not SECRET_KEY:
         raise ImproperlyConfigured('SECRET_KEY must be set in production')
     SECRET_KEY = 'dev-only-secret-key-change-me-please-before-shipping-2026'
 
-ALLOWED_HOSTS = [
-    host.strip() for host in os.getenv(
-        'ALLOWED_HOSTS',
-        'localhost,127.0.0.1,*.up.railway.app,*.railway.app,*.vercel.app,bkostations-production.up.railway.app,bkostations-production.railway.app,bko-stations.onrender.com,bko-station.onrender.com'
-    ).split(',') if host.strip()
-]
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,*.up.railway.app,*.railway.app,*.vercel.app,bkostations-production.up.railway.app,bkostations-production.railway.app,bko-stations.onrender.com,bko-station.onrender.com,bkostations-production.up.railway.app').split(',')
+ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS if host.strip()]
 
 
 # Application definition
