@@ -14,9 +14,9 @@ Ce projet est prêt pour un déploiement Render via le fichier [`render.yaml`](r
 2. Cliquer sur **New +** → **Blueprint**
 3. Connecter le repository GitHub/GitLab
 4. Render détecte automatiquement [`render.yaml`](render.yaml) et crée:
-   - **Web Service backend**: `bko-station-backend` (Python/Django)
-   - **Static Site frontend**: `bko-station-frontend` (HTML/CSS/JS)
-   - **PostgreSQL**: `bko-station-db` (base de données)
+   - **Web Service backend**: `bko-station-backend` (Python/Django) **plan: free** (instance hobby avec cold starts)
+   - **Static Site frontend**: `bko-station-frontend` (HTML/CSS/JS) **plan: free**
+   - **PostgreSQL**: `bko-station-db` (base de données) **plan: free**
 
 ### Configuration automatique
 
@@ -47,6 +47,8 @@ Dans le service backend, vérifier les variables suivantes (préremplies par [`r
 | `SESSION_COOKIE_SECURE` | `True` | Cookies sécurisés |
 | `CSRF_COOKIE_SECURE` | `True` | CSRF cookies sécurisés |
 | `DATABASE_URL` | *(liée à la DB Render)* | Connection string PostgreSQL |
+
+> **Note importante** : Render a récemment modifié sa politique. Le plan `free` pour les Web Services est maintenant limité (Hobby tier avec cold starts après 15 min d'inactivité). Si le blueprint échoue à nouveau avec "no such plan free", vous devrez passer au plan `starter` ou utiliser une alternative gratuite comme Railway, Fly.io ou Render avec un compte payant minimal.
 
 > **Important**: Si les URLs Render diffèrent (noms de services différents), ajuster `ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`, `CSRF_TRUSTED_ORIGINS`.
 
