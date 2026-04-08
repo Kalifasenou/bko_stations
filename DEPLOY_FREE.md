@@ -95,12 +95,14 @@ CSRF_TRUSTED_ORIGINS=https://*.up.railway.app,https://bko-station-frontend.verce
 ### Étape 2 : Déployer le Frontend sur Vercel (5 min)
 
 1. Allez sur [vercel.com](https://vercel.com) et connectez votre repo
-2. Créez un nouveau projet pour le dossier `frontend`
+2. **Important** : Créez un projet Vercel **spécifiquement pour le dossier `frontend`** (Root Directory = `frontend` dans les settings Vercel).
 3. Dans **Build Settings** :
    - **Build Command** : `echo 'window.APP_CONFIG = { API_BASE_URL: "https://bkostations-production.up.railway.app/api" };' > config.js`
    - **Output Directory** : `.`
-4. Ajoutez la variable d'environnement `API_BASE_URL` avec l'URL exacte de votre backend Railway (`https://bkostations-production.up.railway.app/api`)
+4. Ajoutez la variable d'environnement `API_BASE_URL=https://bkostations-production.up.railway.app/api`
 5. Déployez
+
+**Note** : Si le dernier push n'a pas déclenché Vercel, vérifiez que le projet Vercel est bien configuré avec **Root Directory = frontend** et que le branchement Git est actif sur `main`.
 
 ### Étape 3 : Mise à jour finale
 
