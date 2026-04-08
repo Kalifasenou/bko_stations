@@ -37,7 +37,7 @@ if not SECRET_KEY:
         raise ImproperlyConfigured('SECRET_KEY must be set in production')
     SECRET_KEY = 'dev-only-secret-key-change-me-please-before-shipping-2026'
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,*.up.railway.app,*.railway.app,*.vercel.app,bkostations-production.up.railway.app,bkostations-production.railway.app,bko-stations.onrender.com,bko-station.onrender.com,bkostations-production.up.railway.app').split(',')
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,*.up.railway.app,*.railway.app,*.vercel.app,bkostations-production.up.railway.app').split(',')
 ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS if host.strip()]
 
 
@@ -73,13 +73,13 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     origin.strip() for origin in os.getenv(
         'CORS_ALLOWED_ORIGINS',
-        'http://localhost:3000,http://localhost:5500,http://127.0.0.1:5500,http://localhost:8000,http://localhost:8080,http://127.0.0.1:8080,https://bko-station-frontend.vercel.app,https://*.vercel.app'
+        'http://localhost:3000,http://localhost:5500,http://127.0.0.1:5500,http://localhost:8000,http://localhost:8080,http://127.0.0.1:8080,https://bko-station-frontend.vercel.app,https://*.vercel.app,bkostations-production.up.railway.app'
     ).split(',') if origin.strip()
 ]
 CSRF_TRUSTED_ORIGINS = [
     origin.strip() for origin in os.getenv(
         'CSRF_TRUSTED_ORIGINS',
-        'http://localhost:3000,http://localhost:5500,http://127.0.0.1:5500,http://localhost:8000,http://localhost:8080,http://127.0.0.1:8080,https://*.up.railway.app,https://*.vercel.app'
+        'http://localhost:3000,http://localhost:5500,http://127.0.0.1:5500,http://localhost:8000,http://localhost:8080,http://127.0.0.1:8080,https://*.up.railway.app,https://*.vercel.app,bkostations-production.up.railway.app'
     ).split(',') if origin.strip()
 ]
 CORS_ALLOW_METHODS = [
