@@ -1,5 +1,7 @@
 # 🚀 Déploiement 100% Gratuit de BKO Station (Vercel + Railway)
 
+**Note** : Utilisez des **guillemets simples** dans la Build Command Vercel pour éviter les erreurs d'échappement.
+
 ## Meilleure Stratégie Recommandée (2026)
 
 **Frontend (Static) + Backend (Serverless) + DB gratuite**
@@ -74,7 +76,7 @@ Ajoutez les domaines Railway dans `ALLOWED_HOSTS` et `CSRF_TRUSTED_ORIGINS`.
 2. Cliquez sur **New Project** → **Deploy from GitHub repo**
 3. Sélectionnez votre repo `Kalifasenou/bko_stations`
 4. Dans **Root Directory**, mettez `backend`
-5. Railway détectera automatiquement le `railway.json` ou le `Dockerfile`
+5. Railway détectera automatiquement le `railway.json` (qui pointe maintenant vers le `Dockerfile` du backend pour une meilleure compatibilité)
 6. Ajoutez les variables d'environnement suivantes :
 
 ```env
@@ -95,9 +97,9 @@ CSRF_TRUSTED_ORIGINS=https://*.up.railway.app,https://bko-station-frontend.verce
 1. Allez sur [vercel.com](https://vercel.com) et connectez votre repo
 2. Créez un nouveau projet pour le dossier `frontend`
 3. Dans **Build Settings** :
-   - Build Command : `echo "window.APP_CONFIG = { API_BASE_URL: 'https://VOTRE-BACKEND.up.railway.app/api' };\" > config.js`
-   - Output Directory : `.`
-4. Ajoutez la variable d'environnement `API_BASE_URL` avec l'URL de votre backend Railway
+   - **Build Command** : `echo 'window.APP_CONFIG = { API_BASE_URL: \"https://bkostations-production.up.railway.app/api\" };' > config.js`
+   - **Output Directory** : `.`
+4. Ajoutez la variable d'environnement `API_BASE_URL` avec l'URL exacte de votre backend Railway (`https://bkostations-production.up.railway.app/api`)
 5. Déployez
 
 ### Étape 3 : Mise à jour finale

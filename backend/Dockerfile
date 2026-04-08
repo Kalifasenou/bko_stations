@@ -46,8 +46,9 @@ RUN mkdir -p logs static media
 # Collecte des fichiers statiques
 RUN python manage.py collectstatic --noinput || true
 
-# Commande de démarrage (ajustez 'config.wsgi' si votre dossier de config s'appelle autrement)
+# Commande de démarrage
 COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh
 
 # 2. On donne les droits d'exécution
 RUN chmod +x /app/start.sh
