@@ -308,7 +308,7 @@ LOGGING = {
     },
 }
 
-# Security flags - Disabled for Railway free tier (fixes 400 Bad Request)
+# Security flags - Disabled for Railway free tier to prevent 400 Bad Request
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SECURE_SSL_REDIRECT = False
 SESSION_COOKIE_SECURE = False
@@ -316,6 +316,9 @@ CSRF_COOKIE_SECURE = False
 SECURE_HSTS_SECONDS = 0
 SECURE_HSTS_INCLUDE_SUBDOMAINS = False
 SECURE_HSTS_PRELOAD = False
+
+# Force DEBUG=False but disable strict security that causes 400 on free tier
+DEBUG = False
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
