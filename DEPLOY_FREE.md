@@ -52,7 +52,21 @@ Ajoutez les domaines Railway dans `ALLOWED_HOSTS` et `CSRF_TRUSTED_ORIGINS`.
 
 ---
 
-## 2. Déploiement Étape par Étape
+## 2. CI/CD Automatique (Push = Déploiement)
+
+**Chaque `git push` sur `main` déclenchera automatiquement** :
+- Reconstruction du **frontend** sur Vercel
+- Reconstruction du **backend** sur Railway (`migrate` + `collectstatic`)
+- La **base de données** persiste (Railway gère les volumes persistants)
+
+**Important pour ne jamais perdre les données** :
+- Railway utilise un volume PostgreSQL persistant (les données survivent aux redéploiements)
+- Les migrations Django sont exécutées à chaque build (`python manage.py migrate`)
+- Ne jamais supprimer la base de données dans le dashboard Railway
+
+---
+
+## 3. Déploiement Étape par Étape
 
 ### Étape 1 : Déployer le Backend + DB sur Railway (15 min)
 
@@ -88,9 +102,11 @@ CSRF_TRUSTED_ORIGINS=https://*.up.railway.app,https://bko-station-frontend.verce
 
 ### Étape 3 : Mise à jour finale
 
-1. Mettez à jour les variables CORS dans le backend Railway avec l'URL Vercel du frontend.
-2. Redéployez le backend.
-3. Testez avec les scripts de vérification.
+1. Mettez à jour les variables CORS dans le backend Railway avec l'URL exacte de votre frontend Vercel.
+2. Redéployez (un simple `git push` suffit ensuite pour tout mettre à jour).
+3. Testez avec les scripts de vérification mis à jour.
+
+**CI/CD activé** : À partir de maintenant, **tout push sur `main`** déploiera automatiquement les modifications du frontend, backend et exécutera les migrations sans perdre les données existantes dans la base PostgreSQL persistante de Railway.
 
 ---
 
