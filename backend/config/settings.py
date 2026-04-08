@@ -40,7 +40,7 @@ if not SECRET_KEY:
 ALLOWED_HOSTS = [
     host.strip() for host in os.getenv(
         'ALLOWED_HOSTS',
-        'localhost,127.0.0.1,*.up.railway.app,*.railway.app,*.vercel.app,bkostations-production.up.railway.app'
+        'localhost,127.0.0.1,*.up.railway.app,*.railway.app,*.vercel.app,bkostations-production.up.railway.app,bkostations-production.railway.app'
     ).split(',') if host.strip()
 ]
 
