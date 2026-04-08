@@ -43,7 +43,7 @@ services:
     runtime: static
     rootDir: frontend
     plan: free
-    buildCommand: echo "window.APP_CONFIG = { API_BASE_URL: 'https://bko-station-backend.onrender.com/api' };" > config.js
+    buildCommand: "echo \"window.APP_CONFIG = { API_BASE_URL: 'https://bko-station-backend.onrender.com/api' };\" > config.js"
     staticPublishPath: .
     autoDeploy: true
     headers:
