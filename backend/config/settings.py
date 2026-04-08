@@ -308,31 +308,14 @@ LOGGING = {
     },
 }
 
-# Security flags (Production)
+# Security flags (Production) - Disabled for Railway free tier to avoid 400 errors
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-SECURE_SSL_REDIRECT = os.getenv(
-    'SECURE_SSL_REDIRECT',
-    'True' if IS_PRODUCTION and not IS_TESTING else 'False'
-).lower() == 'true'
-SESSION_COOKIE_SECURE = os.getenv(
-    'SESSION_COOKIE_SECURE',
-    'True' if IS_PRODUCTION and not IS_TESTING else 'False'
-).lower() == 'true'
-CSRF_COOKIE_SECURE = os.getenv(
-    'CSRF_COOKIE_SECURE',
-    'True' if IS_PRODUCTION and not IS_TESTING else 'False'
-).lower() == 'true'
-SECURE_HSTS_SECONDS = int(
-    os.getenv('SECURE_HSTS_SECONDS', '31536000' if IS_PRODUCTION and not IS_TESTING else '0')
-)
-SECURE_HSTS_INCLUDE_SUBDOMAINS = os.getenv(
-    'SECURE_HSTS_INCLUDE_SUBDOMAINS',
-    'True' if SECURE_HSTS_SECONDS > 0 else 'False'
-).lower() == 'true'
-SECURE_HSTS_PRELOAD = os.getenv(
-    'SECURE_HSTS_PRELOAD',
-    'True' if SECURE_HSTS_SECONDS > 0 else 'False'
-).lower() == 'true'
+SECURE_SSL_REDIRECT = False
+SESSION_COOKIE_SECURE = False
+CSRF_COOKIE_SECURE = False
+SECURE_HSTS_SECONDS = 0
+SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+SECURE_HSTS_PRELOAD = False
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

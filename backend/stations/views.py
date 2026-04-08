@@ -1092,8 +1092,15 @@ def register_user(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    user = User.objects.create_user(username=username, password=password)
-    UserProfile.objects.create(user=user, phone=phone)
+    try:
+        user = User.objects.create_user(username=username, password=password)
+        UserProfile.objects.create(user=user, phone=phone)
+    except Exception as e:
+        logger.error(f"Erreur création utilisateur: {e}")
+        return Response(
+            {'error': 'Erreur serveur lors de la création du compte. Réessayez.'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
     refresh = RefreshToken.for_user(user)
 
