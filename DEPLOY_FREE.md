@@ -97,7 +97,7 @@ CSRF_TRUSTED_ORIGINS=https://*.up.railway.app,https://bko-station-frontend.verce
 1. Allez sur [vercel.com](https://vercel.com) et connectez votre repo
 2. Créez un nouveau projet pour le dossier `frontend`
 3. Dans **Build Settings** :
-   - **Build Command** : `echo 'window.APP_CONFIG = { API_BASE_URL: \"https://bkostations-production.up.railway.app/api\" };' > config.js`
+   - **Build Command** : `echo 'window.APP_CONFIG = { API_BASE_URL: "https://bkostations-production.up.railway.app/api" };' > config.js`
    - **Output Directory** : `.`
 4. Ajoutez la variable d'environnement `API_BASE_URL` avec l'URL exacte de votre backend Railway (`https://bkostations-production.up.railway.app/api`)
 5. Déployez
