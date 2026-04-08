@@ -222,22 +222,14 @@ python manage.py collectstatic
 gunicorn config.wsgi:application
 ```
 
-### Frontend (Vercel/Netlify/GitHub Pages)
+### Déploiement Gratuit (Recommandé)
 
-Le frontend est statique et peut être déployé sur n'importe quel hébergeur statique :
+Voir le guide complet [`DEPLOY_FREE.md`](DEPLOY_FREE.md) pour déployer :
 
-```bash
-# Build (si nécessaire)
-cd frontend
+- **Frontend** sur **Vercel** (statique + PWA)
+- **Backend + Database** sur **Railway** (Django + PostgreSQL gratuit)
 
-# Déployer sur Vercel
-vercel --prod
-
-# Ou Netlify
-netlify deploy --prod
-```
-
-**Important** : Mettre à jour `API_BASE_URL` dans `app.js` avec l'URL de production du backend.
+Les fichiers de configuration (`railway.json`, settings.py mis à jour) sont déjà prêts.
 
 ## 🎨 Personnalisation
 

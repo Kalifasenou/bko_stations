@@ -2,7 +2,7 @@
 REM ============================================================
 REM BKO Station - Deployment Verification Script (Windows)
 REM Usage: verify_deployment.bat [backend_url] [frontend_url]
-REM Example: verify_deployment.bat https://bko-station-backend.onrender.com https://bko-station-frontend.onrender.com
+REM Example: verify_deployment.bat https://bko-station-production.up.railway.app https://bko-station-frontend.vercel.app
 REM ============================================================
 
 setlocal enabledelayedexpansion

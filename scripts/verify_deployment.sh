@@ -2,7 +2,7 @@
 # ============================================================
 # BKO Station - Deployment Verification Script
 # Usage: ./verify_deployment.sh <backend_url> <frontend_url>
-# Example: ./verify_deployment.sh https://bko-station-backend.onrender.com https://bko-station-frontend.onrender.com
+# Example: ./verify_deployment.sh https://bko-station-production.up.railway.app https://bko-station-frontend.vercel.app
 # ============================================================
 
 set -e
@@ -118,7 +118,7 @@ fi
 echo ""
 echo "--- CORS Headers ---"
 CORS_HEADERS=$(curl -sI -X OPTIONS "${BACKEND_URL}/api/stations/" \
-    -H "Origin: https://bko-station-frontend.onrender.com" \
+    -H "Origin: https://bko-station-frontend.vercel.app" \
     -H "Access-Control-Request-Method: GET" 2>/dev/null || echo "")
 if echo "$CORS_HEADERS" | grep -qi "access-control-allow-origin"; then
     log_pass "CORS headers present"

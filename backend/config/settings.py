@@ -40,7 +40,7 @@ if not SECRET_KEY:
 ALLOWED_HOSTS = [
     host.strip() for host in os.getenv(
         'ALLOWED_HOSTS',
-        'bko-stations.onrender.com,localhost,127.0.0.1,bko-station.onrender.com'
+        'localhost,127.0.0.1,*.up.railway.app,*.railway.app,*.vercel.app'
     ).split(',') if host.strip()
 ]
 
@@ -77,13 +77,13 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     origin.strip() for origin in os.getenv(
         'CORS_ALLOWED_ORIGINS',
-        'http://localhost:3000,http://localhost:5500,http://127.0.0.1:5500,http://localhost:8000,http://localhost:8080,http://127.0.0.1:8080'
+        'http://localhost:3000,http://localhost:5500,http://127.0.0.1:5500,http://localhost:8000,http://localhost:8080,http://127.0.0.1:8080,https://bko-station-frontend.vercel.app,https://*.vercel.app'
     ).split(',') if origin.strip()
 ]
 CSRF_TRUSTED_ORIGINS = [
     origin.strip() for origin in os.getenv(
         'CSRF_TRUSTED_ORIGINS',
-        'http://localhost:3000,http://localhost:5500,http://127.0.0.1:5500,http://localhost:8000,http://localhost:8080,http://127.0.0.1:8080'
+        'http://localhost:3000,http://localhost:5500,http://127.0.0.1:5500,http://localhost:8000,http://localhost:8080,http://127.0.0.1:8080,https://*.up.railway.app,https://*.vercel.app'
     ).split(',') if origin.strip()
 ]
 CORS_ALLOW_METHODS = [
@@ -308,7 +308,7 @@ LOGGING = {
     },
 }
 
-# Security flags (Render/production)
+# Security flags (Production)
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SECURE_SSL_REDIRECT = os.getenv(
     'SECURE_SSL_REDIRECT',

@@ -12,9 +12,8 @@ const API_CONFIGS = {
     // Développement local
     'localhost': 'http://localhost:8000/api',
     '127.0.0.1': 'http://localhost:8000/api',
-    // Production Render
-    'bko-station-frontend.onrender.com': 'https://bko-station-backend.onrender.com/api',
-    // Autres environnements - utilise l'hôte actuel
+    // Production Vercel + Railway
+    // Utilise la détection automatique basée sur window.APP_CONFIG ou hostname
 };
 
 // Fonction pour obtenir l'URL de l'API
