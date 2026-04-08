@@ -308,7 +308,7 @@ LOGGING = {
     },
 }
 
-# Security flags (Production) - Disabled for Railway free tier to avoid 400 errors
+# Security flags - Disabled for Railway free tier (fixes 400 Bad Request)
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SECURE_SSL_REDIRECT = False
 SESSION_COOKIE_SECURE = False
