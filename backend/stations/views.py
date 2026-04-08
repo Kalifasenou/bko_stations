@@ -124,7 +124,10 @@ class StationViewSet(viewsets.ModelViewSet):
             try:
                 freshness_minutes = max(1, min(int(freshness_minutes), 240))
                 threshold = timezone.now() - timedelta(minutes=freshness_minutes)
-                queryset = queryset.filter(signalements__timestamp__gte=threshold).distinct()
+                # Only filter by freshness if there's also a fuel filter active
+                # Otherwise show all stations (with or without signalements)
+                if available_fuel:
+                    queryset = queryset.filter(signalements__timestamp__gte=threshold).distinct()
             except ValueError:
                 pass
 
@@ -174,7 +177,12 @@ class SignalementViewSet(viewsets.ModelViewSet):
     queryset = Signalement.objects.all()
     serializer_class = SignalementSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
-    throttle_classes = [SignalementAnonRateThrottle, SignalementUserRateThrottle]
+
+    def get_throttles(self):
+        """Apply rate limiting only to write operations (POST)"""
+        if self.action == 'create':
+            return [SignalementAnonRateThrottle(), SignalementUserRateThrottle()]
+        return []
 
     def create(self, request, *args, **kwargs):
         """Créer un nouveau signalement avec validation IP et incrémentation"""

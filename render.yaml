@@ -4,8 +4,8 @@ services:
     runtime: python
     rootDir: backend
     plan: free
-    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
-    startCommand: python manage.py migrate && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate --noinput
+    startCommand: gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --timeout 120 --workers 2 --threads 2
     healthCheckPath: /api/health/
     autoDeploy: true
     envVars:
@@ -13,16 +13,18 @@ services:
         value: 3.12.7
       - key: DJANGO_SETTINGS_MODULE
         value: config.settings
+      - key: ENVIRONMENT
+        value: production
       - key: DEBUG
         value: "False"
       - key: SECRET_KEY
         generateValue: true
       - key: ALLOWED_HOSTS
-        value: bko-station-backend.onrender.com
+        value: bko-station-backend.onrender.com,localhost,127.0.0.1
       - key: CORS_ALLOW_ALL_ORIGINS
         value: "False"
       - key: CORS_ALLOWED_ORIGINS
-        value: https://bko-station-frontend.onrender.com
+        value: https://bko-station-frontend.onrender.com,http://localhost:8080
       - key: CSRF_TRUSTED_ORIGINS
         value: https://bko-station-backend.onrender.com,https://bko-station-frontend.onrender.com
       - key: SECURE_SSL_REDIRECT
@@ -40,12 +42,24 @@ services:
     name: bko-station-frontend
     runtime: static
     rootDir: frontend
-    buildCommand: "printf \"window.APP_CONFIG = { API_BASE_URL: 'https://bko-station-backend.onrender.com/api' };\\n\" > config.js"
+    plan: free
+    buildCommand: echo "window.APP_CONFIG = { API_BASE_URL: 'https://bko-station-backend.onrender.com/api' };" > config.js
     staticPublishPath: .
     autoDeploy: true
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: SAMEORIGIN
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-XSS-Protection
+        value: 1; mode=block
 
 databases:
   - name: bko-station-db
     plan: free
     databaseName: bko_station
     user: bko_station_user
+    ipAllowList: []
