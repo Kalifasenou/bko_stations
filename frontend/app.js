@@ -431,6 +431,8 @@ async function updateAdditionalSituations(station) {
         const zoneName = electricityData.zone?.name ? ` - ${electricityData.zone.name}` : '';
         const timeAgo = electricityData.signalement.time_ago ? ` (${electricityData.signalement.time_ago})` : '';
         elements.electricityStatus.textContent = `${status}${zoneName}${timeAgo}`;
+    } else if (electricityData && !electricityData.zone) {
+        elements.electricityStatus.textContent = 'Hors zone électrique couverte';
     } else {
         elements.electricityStatus.textContent = 'Non signalé';
     }
@@ -1005,7 +1007,7 @@ async function reportElectricityByZone(status, comment = '') {
         const lookupData = await lookupResponse.json();
         const zoneId = lookupData?.zone?.id;
         if (!zoneId) {
-            throw new Error('Aucune zone électrique disponible à proximité');
+            throw new Error('Votre position est hors zone électrique couverte');
         }
 
         const response = await fetch(`${CONFIG.API_BASE_URL}/electricite-signalements/`, {
@@ -1112,8 +1114,8 @@ function showListView() {
                 <div class="filters-grid">
                     <select id="filter-fuel-select" class="search-input">
                         <option value="all">Tous carburants</option>
-                        <option value="Essence">Essence dispo</option>
-                        <option value="Gazole">Gazole dispo</option>
+                        <option value="Essence">Essence signalée (dispo/épuisé)</option>
+                        <option value="Gazole">Gazole signalé (dispo/épuisé)</option>
                     </select>
                     <select id="filter-radius-select" class="search-input">
                         <option value="2">Rayon 2 km</option>

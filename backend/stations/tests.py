@@ -185,6 +185,26 @@ class StationAPITests(APITestCase):
         response = self.client.get('/api/search/?q=S')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_available_fuel_filter_keeps_empty_with_recent_signal(self):
+        """Le filtre carburant garde aussi les stations en rupture récente."""
+        Signalement.objects.create(
+            station=self.station1,
+            fuel_type='Essence',
+            status='Épuisé'
+        )
+        Signalement.objects.create(
+            station=self.station2,
+            fuel_type='Essence',
+            status='Disponible'
+        )
+
+        response = self.client.get('/api/stations/?available_fuel=Essence')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        station_ids = [item['id'] for item in response.data.get('results', response.data)]
+        self.assertIn(self.station1.id, station_ids)
+        self.assertIn(self.station2.id, station_ids)
+
     def test_create_station_with_manager_name(self):
         """Test la création d'une station avec nom du gérant"""
         data = {
@@ -404,6 +424,13 @@ class ElectricityZoneAPITests(APITestCase):
         response = self.client.get('/api/electricity/by-location/?lat=12.6499&lon=-7.9851')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('zone', response.data)
+        self.assertEqual(response.data['zone']['id'], self.zone.id)
+
+    def test_electricity_by_location_outside_any_zone_returns_none(self):
+        response = self.client.get('/api/electricity/by-location/?lat=12.8000&lon=-8.3000')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsNone(response.data['zone'])
+        self.assertIsNone(response.data['signalement'])
 
     def test_create_electricity_signalement_authenticated(self):
         token_response = self.client.post('/api/auth/token/', {

@@ -113,9 +113,10 @@ class StationViewSet(viewsets.ModelViewSet):
 
         available_fuel = self.request.query_params.get('available_fuel')
         if available_fuel in ['Essence', 'Gazole']:
+            # Inclure toutes les stations ayant un signalement récent pour ce carburant,
+            # y compris les ruptures (Épuisé), afin d'afficher le signal adéquat.
             queryset = queryset.filter(
                 signalements__fuel_type=available_fuel,
-                signalements__status='Disponible',
                 signalements__timestamp__gte=timezone.now() - timedelta(hours=4)
             ).distinct()
 
@@ -475,13 +476,24 @@ def electricity_by_location(request):
     if not zones.exists():
         return Response({"zone": None, "signalement": None})
 
-    nearest_zone = None
-    min_distance = None
+    # Découpage effectif par quartier/zone: on ne retient que les points situés
+    # dans le rayon défini de la zone (radius_km).
+    matching_zones = []
     for zone in zones:
         distance = calculate_distance(lat, lon, zone.latitude, zone.longitude)
-        if min_distance is None or distance < min_distance:
-            min_distance = distance
-            nearest_zone = zone
+        if distance <= zone.radius_km:
+            matching_zones.append((distance, zone))
+
+    if not matching_zones:
+        return Response({
+            'zone': None,
+            'distance_km': None,
+            'signalement': None,
+            'reliability_score': 0,
+        })
+
+    matching_zones.sort(key=lambda x: x[0])
+    min_distance, nearest_zone = matching_zones[0]
 
     latest = nearest_zone.get_latest_signalement() if nearest_zone else None
     return Response({
