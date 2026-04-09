@@ -37,8 +37,24 @@ if not SECRET_KEY:
         raise ImproperlyConfigured('SECRET_KEY must be set in production')
     SECRET_KEY = 'dev-only-secret-key-change-me-please-before-shipping-2026'
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,*.up.railway.app,*.railway.app,*.vercel.app,bkostations-production.up.railway.app').split(',')
-ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS if host.strip()]
+_raw_allowed_hosts = os.getenv(
+    'ALLOWED_HOSTS',
+    'localhost,127.0.0.1,.up.railway.app,.railway.app,.vercel.app,bkostations-production.up.railway.app'
+).split(',')
+
+# Normalize host patterns coming from env (e.g. '*.up.railway.app' -> '.up.railway.app')
+ALLOWED_HOSTS = []
+for host in _raw_allowed_hosts:
+    host = host.strip()
+    if not host:
+        continue
+    if host.startswith('*.'):
+        host = f".{host[2:]}"
+    ALLOWED_HOSTS.append(host)
+
+# Railway can send the exact hostname in Host header; ensure it's allowed.
+# If you override ALLOWED_HOSTS in the environment, make sure it includes:
+# - bkostations-production.up.railway.app
 
 
 # Application definition
@@ -73,13 +89,13 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     origin.strip() for origin in os.getenv(
         'CORS_ALLOWED_ORIGINS',
-        'http://localhost:3000,http://localhost:5500,http://127.0.0.1:5500,http://localhost:8000,http://localhost:8080,http://127.0.0.1:8080,https://bko-station-frontend.vercel.app,https://*.vercel.app,bkostations-production.up.railway.app'
+        'http://localhost:3000,http://localhost:5500,http://127.0.0.1:5500,http://localhost:8000,http://localhost:8080,http://127.0.0.1:8080,https://bko-station-frontend.vercel.app,https://bko-stations.vercel.app,https://*.vercel.app,https://bkostations-production.up.railway.app'
     ).split(',') if origin.strip()
 ]
 CSRF_TRUSTED_ORIGINS = [
     origin.strip() for origin in os.getenv(
         'CSRF_TRUSTED_ORIGINS',
-        'http://localhost:3000,http://localhost:5500,http://127.0.0.1:5500,http://localhost:8000,http://localhost:8080,http://127.0.0.1:8080,https://*.up.railway.app,https://*.vercel.app,bkostations-production.up.railway.app'
+        'http://localhost:3000,http://localhost:5500,http://127.0.0.1:5500,http://localhost:8000,http://localhost:8080,http://127.0.0.1:8080,https://*.up.railway.app,https://bko-station-frontend.vercel.app,https://bko-stations.vercel.app,https://*.vercel.app,https://bkostations-production.up.railway.app'
     ).split(',') if origin.strip()
 ]
 CORS_ALLOW_METHODS = [
@@ -304,17 +320,23 @@ LOGGING = {
     },
 }
 
-# Security flags - Disabled for Railway free tier to prevent 400 Bad Request
+# Security flags - configurable for production vs development
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-SECURE_SSL_REDIRECT = False
-SESSION_COOKIE_SECURE = False
-CSRF_COOKIE_SECURE = False
-SECURE_HSTS_SECONDS = 0
-SECURE_HSTS_INCLUDE_SUBDOMAINS = False
-SECURE_HSTS_PRELOAD = False
 
-# Force DEBUG=False but disable strict security that causes 400 on free tier
-DEBUG = False
+if IS_PRODUCTION:
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+else:
+    SECURE_SSL_REDIRECT = False
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
+    SECURE_HSTS_SECONDS = 0
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+    SECURE_HSTS_PRELOAD = False
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

@@ -28,25 +28,14 @@ class IsOwnerOrReadOnly(permissions.BasePermission):
         return obj.owner == request.user
 
 
-class CanCreateSignalement(permissions.BasePermission):
+class IsAuthenticatedOrReadOnlyForSignalement(permissions.BasePermission):
     """
-    Permission pour créer des signalements:
-    - Tous les utilisateurs peuvent créer
-    - Mais avec rate limiting par IP
-    """
-    def has_permission(self, request, view):
-        if request.method == 'POST':
-            return True
-        return True
-
-
-class CanApproveSignalement(permissions.BasePermission):
-    """
-    Permission pour approuver des signalements:
-    - Tous les utilisateurs peuvent approuver
-    - Mais avec rate limiting par IP
+    Permission pour les signalements:
+    - Lecture: accessible à tous (y compris anonymes)
+    - Écriture (POST): nécessite authentification
+    - Le rate limiting est géré par les throttle classes
     """
     def has_permission(self, request, view):
-        if request.method == 'POST':
+        if request.method in permissions.SAFE_METHODS:
             return True
-        return True
+        return request.user and request.user.is_authenticated

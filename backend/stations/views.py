@@ -28,7 +28,7 @@ from .utils import (
     get_user_ip,
     validate_coordinates as utils_validate_coordinates,
 )
-from .permissions import IsAdminOrReadOnly
+from .permissions import IsAdminOrReadOnly, IsAuthenticatedOrReadOnlyForSignalement
 
 logger = logging.getLogger(__name__)
 
@@ -176,7 +176,7 @@ class SignalementViewSet(viewsets.ModelViewSet):
     """ViewSet pour les signalements de carburant"""
     queryset = Signalement.objects.all()
     serializer_class = SignalementSerializer
-    permission_classes = [IsAuthenticatedOrReadOnly]
+    permission_classes = [IsAuthenticatedOrReadOnlyForSignalement]
 
     def get_throttles(self):
         """Apply rate limiting only to write operations (POST)"""
@@ -348,7 +348,7 @@ class ElectriciteSignalementViewSet(viewsets.ModelViewSet):
     """ViewSet pour les signalements électricité par zone"""
     queryset = ElectriciteSignalement.objects.all()
     serializer_class = ElectriciteSignalementSerializer
-    permission_classes = [IsAuthenticatedOrReadOnly]
+    permission_classes = [IsAuthenticatedOrReadOnlyForSignalement]
     throttle_classes = [SignalementAnonRateThrottle, SignalementUserRateThrottle]
 
     def create(self, request, *args, **kwargs):
