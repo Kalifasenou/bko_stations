@@ -228,6 +228,8 @@ class StationSerializer(serializers.ModelSerializer):
             "latitude",
             "longitude",
             "is_active",
+            "is_pending",
+            "rejected_reason",
             "created_at",
             "updated_at",
             "latest_signalement",
@@ -246,6 +248,8 @@ class StationSerializer(serializers.ModelSerializer):
             "has_recent_signalement",
             "confidence_score",
             "has_conflicting_reports",
+            "is_pending",
+            "rejected_reason",
         ]
 
     def get_latest_signalement(self, obj):

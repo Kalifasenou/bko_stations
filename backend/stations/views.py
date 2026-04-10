@@ -80,13 +80,17 @@ class StandardResultsSetPagination(PageNumberPagination):
 class StationViewSet(viewsets.ModelViewSet):
     """ViewSet pour les stations de carburant"""
 
-    queryset = Station.objects.filter(is_active=True)
     serializer_class = StationSerializer
     permission_classes = [IsAdminOrReadOnlyWithPublicCreate]
     pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
-        queryset = Station.objects.filter(is_active=True)
+        # Public users only see active, approved stations
+        # Staff can see all stations including pending ones
+        if self.request.user and self.request.user.is_staff:
+            queryset = Station.objects.all()
+        else:
+            queryset = Station.objects.filter(is_active=True, is_pending=False)
 
         # Filtrer par brand si fourni
         brand = self.request.query_params.get("brand")
@@ -171,6 +175,31 @@ class StationViewSet(viewsets.ModelViewSet):
 
         return queryset
 
+    def create(self, request, *args, **kwargs):
+        """Create a new station. Non-staff submissions are marked as pending."""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        # Non-staff submissions go into pending state for admin review
+        if not (request.user and request.user.is_staff):
+            serializer.save(is_pending=True)
+            headers = self.get_success_headers(serializer.data)
+            return Response(
+                {
+                    **serializer.data,
+                    "message": "Station soumise avec succès. Elle sera visible après validation par un administrateur.",
+                },
+                status=status.HTTP_201_CREATED,
+                headers=headers,
+            )
+
+        # Staff can create stations directly
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(
+            serializer.data, status=status.HTTP_201_CREATED, headers=headers
+        )
+
     @action(detail=True, methods=["get"])
     def nearby(self, request, pk=None):
         """Retourne les stations à proximité d'une station donnée"""
@@ -201,6 +230,44 @@ class StationViewSet(viewsets.ModelViewSet):
             return Response(
                 {"error": "Paramètres invalides"}, status=status.HTTP_400_BAD_REQUEST
             )
+
+    @action(detail=True, methods=["post"], permission_classes=[IsAdminOrReadOnly])
+    def approve(self, request, pk=None):
+        """Admin action: approve a pending station."""
+        station = self.get_object()
+        if not station.is_pending:
+            return Response(
+                {"error": "Cette station est déjà approuvée"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        station.is_pending = False
+        station.is_active = True
+        station.rejected_reason = ""
+        station.save(update_fields=["is_pending", "is_active", "rejected_reason"])
+        return Response(
+            {
+                "message": "Station approuvée et activée",
+                **self.get_serializer(station).data,
+            }
+        )
+
+    @action(detail=True, methods=["post"], permission_classes=[IsAdminOrReadOnly])
+    def reject(self, request, pk=None):
+        """Admin action: reject a pending station."""
+        station = self.get_object()
+        if not station.is_pending:
+            return Response(
+                {"error": "Cette station n'est pas en attente"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        reason = request.data.get("reason", "Station rejetée par l'administrateur")
+        station.is_pending = False
+        station.is_active = False
+        station.rejected_reason = reason
+        station.save(update_fields=["is_pending", "is_active", "rejected_reason"])
+        return Response(
+            {"message": "Station rejetée", **self.get_serializer(station).data}
+        )
 
 
 class SignalementViewSet(viewsets.ModelViewSet):

@@ -9,7 +9,13 @@ from datetime import timedelta
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
-from .constants import BAMAKO_BOUNDS, DISTANCE_LIMITS, ERROR_MESSAGES, TIME_LIMITS
+from .constants import (
+    BAMAKO_BOUNDS,
+    DISTANCE_LIMITS,
+    ERROR_MESSAGES,
+    MALI_BOUNDS,
+    TIME_LIMITS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -90,11 +96,35 @@ def is_within_bamako_bounds(lat, lon):
     )
 
 
+def is_within_mali_bounds(lat, lon):
+    """Vérifie si un point est dans les frontières du Mali (validation large)."""
+    try:
+        lat = float(lat)
+        lon = float(lon)
+    except (TypeError, ValueError):
+        return False
+
+    return (
+        MALI_BOUNDS["MIN_LAT"] <= lat <= MALI_BOUNDS["MAX_LAT"]
+        and MALI_BOUNDS["MIN_LON"] <= lon <= MALI_BOUNDS["MAX_LON"]
+    )
+
+
 def validate_bamako_coordinates(lat, lon):
     """Valide qu'un point GPS appartient à la zone couverte de Bamako."""
     if not is_within_bamako_bounds(lat, lon):
         raise ValidationError(
             "Les coordonnées sont hors de la zone de couverture (Bamako)"
+        )
+    return float(lat), float(lon)
+
+
+def validate_mali_coordinates(lat, lon):
+    """Valide qu'un point GPS est au moins dans les frontières du Mali.
+    Rejette automatiquement les coordonnées fantaisistes hors du Mali."""
+    if not is_within_mali_bounds(lat, lon):
+        raise ValidationError(
+            "Coordonnées hors du Mali. Veuillez vérifier la position saisie."
         )
     return float(lat), float(lon)
 
