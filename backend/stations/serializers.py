@@ -1,23 +1,38 @@
 from rest_framework import serializers
-from .models import Station, Signalement, ZoneElectrique, ElectriciteSignalement
-from .constants import FUEL_TYPES, FUEL_STATUS, ELECTRICITY_STATUS
+
+from .constants import (
+    BAMAKO_BOUNDS,
+    ELECTRICITY_STATUS,
+    FUEL_STATUS,
+    FUEL_TYPES,
+)
+from .models import ElectriciteSignalement, Signalement, Station, ZoneElectrique
 
 
 class SignalementSerializer(serializers.ModelSerializer):
     """Sérialiseur pour les signalements"""
-    station_name = serializers.CharField(source='station.name', read_only=True)
-    station_brand = serializers.CharField(source='station.brand', read_only=True)
+
+    station_name = serializers.CharField(source="station.name", read_only=True)
+    station_brand = serializers.CharField(source="station.brand", read_only=True)
     time_ago = serializers.SerializerMethodField()
     is_expired = serializers.SerializerMethodField()
 
     class Meta:
         model = Signalement
         fields = [
-            'id', 'station', 'station_name', 'station_brand',
-            'fuel_type', 'status', 'timestamp', 'approval_count',
-            'time_ago', 'is_expired', 'comment'
+            "id",
+            "station",
+            "station_name",
+            "station_brand",
+            "fuel_type",
+            "status",
+            "timestamp",
+            "approval_count",
+            "time_ago",
+            "is_expired",
+            "comment",
         ]
-        read_only_fields = ['id', 'timestamp', 'approval_count']
+        read_only_fields = ["id", "timestamp", "approval_count"]
 
     def validate_fuel_type(self, value):
         """Valide le type de carburant"""
@@ -39,16 +54,16 @@ class SignalementSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         """Validation globale du signalement"""
-        station = attrs.get('station')
-        fuel_type = attrs.get('fuel_type')
-        
+        station = attrs.get("station")
+        fuel_type = attrs.get("fuel_type")
+
         if station and fuel_type:
             # Vérifier que la station existe et est active
             if not station.is_active:
                 raise serializers.ValidationError(
                     {"station": "Cette station n'est plus active"}
                 )
-        
+
         return attrs
 
     def get_time_ago(self, obj):
@@ -75,6 +90,7 @@ class SignalementSerializer(serializers.ModelSerializer):
 
 class ZoneElectriqueSerializer(serializers.ModelSerializer):
     """Sérialiseur des zones électriques"""
+
     latest_signalement = serializers.SerializerMethodField()
     reliability_score = serializers.SerializerMethodField()
     has_conflicting_reports = serializers.SerializerMethodField()
@@ -83,11 +99,28 @@ class ZoneElectriqueSerializer(serializers.ModelSerializer):
     class Meta:
         model = ZoneElectrique
         fields = [
-            'id', 'name', 'zone_type', 'latitude', 'longitude', 'radius_km',
-            'is_active', 'latest_signalement', 'reliability_score', 'has_conflicting_reports', 'electricity_status_color',
-            'created_at', 'updated_at'
+            "id",
+            "name",
+            "zone_type",
+            "latitude",
+            "longitude",
+            "radius_km",
+            "is_active",
+            "latest_signalement",
+            "reliability_score",
+            "has_conflicting_reports",
+            "electricity_status_color",
+            "created_at",
+            "updated_at",
         ]
-        read_only_fields = ['created_at', 'updated_at', 'latest_signalement', 'reliability_score', 'has_conflicting_reports', 'electricity_status_color']
+        read_only_fields = [
+            "created_at",
+            "updated_at",
+            "latest_signalement",
+            "reliability_score",
+            "has_conflicting_reports",
+            "electricity_status_color",
+        ]
 
     def get_latest_signalement(self, obj):
         latest = obj.get_latest_signalement()
@@ -104,20 +137,30 @@ class ZoneElectriqueSerializer(serializers.ModelSerializer):
 
 class ElectriciteSignalementSerializer(serializers.ModelSerializer):
     """Sérialiseur pour les signalements d'électricité (zones)"""
-    zone_name = serializers.CharField(source='zone.name', read_only=True)
-    zone_type = serializers.CharField(source='zone.zone_type', read_only=True)
+
+    zone_name = serializers.CharField(source="zone.name", read_only=True)
+    zone_type = serializers.CharField(source="zone.zone_type", read_only=True)
     time_ago = serializers.SerializerMethodField()
     is_expired = serializers.SerializerMethodField()
 
     class Meta:
         model = ElectriciteSignalement
         fields = [
-            'id', 'zone', 'zone_name', 'zone_type',
-            'status', 'load_level', 'source_type', 'duration_estimate_minutes',
-            'timestamp', 'approval_count',
-            'time_ago', 'is_expired', 'comment'
+            "id",
+            "zone",
+            "zone_name",
+            "zone_type",
+            "status",
+            "load_level",
+            "source_type",
+            "duration_estimate_minutes",
+            "timestamp",
+            "approval_count",
+            "time_ago",
+            "is_expired",
+            "comment",
         ]
-        read_only_fields = ['id', 'timestamp', 'approval_count']
+        read_only_fields = ["id", "timestamp", "approval_count"]
 
     def validate_status(self, value):
         valid_statuses = [status for status in ELECTRICITY_STATUS.values()]
@@ -129,11 +172,13 @@ class ElectriciteSignalementSerializer(serializers.ModelSerializer):
 
     def validate_duration_estimate_minutes(self, value):
         if value < 0 or value > 1440:
-            raise serializers.ValidationError("La durée estimée doit être entre 0 et 1440 minutes")
+            raise serializers.ValidationError(
+                "La durée estimée doit être entre 0 et 1440 minutes"
+            )
         return value
 
     def validate(self, attrs):
-        zone = attrs.get('zone')
+        zone = attrs.get("zone")
         if zone and not zone.is_active:
             raise serializers.ValidationError({"zone": "Cette zone n'est plus active"})
         return attrs
@@ -161,6 +206,7 @@ class ElectriciteSignalementSerializer(serializers.ModelSerializer):
 
 class StationSerializer(serializers.ModelSerializer):
     """Sérialiseur pour les stations"""
+
     latest_signalement = serializers.SerializerMethodField()
     essence_signalement = serializers.SerializerMethodField()
     gazole_signalement = serializers.SerializerMethodField()
@@ -173,14 +219,34 @@ class StationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Station
         fields = [
-            'id', 'name', 'brand', 'address', 'manager_name', 'phone',
-            'latitude', 'longitude', 'is_active',
-            'created_at', 'updated_at', 'latest_signalement',
-            'essence_signalement', 'gazole_signalement',
-            'status_color', 'distance', 'has_recent_signalement',
-            'confidence_score', 'has_conflicting_reports'
+            "id",
+            "name",
+            "brand",
+            "address",
+            "manager_name",
+            "phone",
+            "latitude",
+            "longitude",
+            "is_active",
+            "created_at",
+            "updated_at",
+            "latest_signalement",
+            "essence_signalement",
+            "gazole_signalement",
+            "status_color",
+            "distance",
+            "has_recent_signalement",
+            "confidence_score",
+            "has_conflicting_reports",
         ]
-        read_only_fields = ['created_at', 'updated_at', 'status_color', 'has_recent_signalement', 'confidence_score', 'has_conflicting_reports']
+        read_only_fields = [
+            "created_at",
+            "updated_at",
+            "status_color",
+            "has_recent_signalement",
+            "confidence_score",
+            "has_conflicting_reports",
+        ]
 
     def get_latest_signalement(self, obj):
         """Retourne le dernier signalement non expiré"""
@@ -191,42 +257,51 @@ class StationSerializer(serializers.ModelSerializer):
 
     def get_essence_signalement(self, obj):
         """Retourne le dernier signalement non expiré pour l'essence"""
-        latest = obj.get_latest_signalement_for_fuel('Essence')
+        latest = obj.get_latest_signalement_for_fuel("Essence")
         if latest:
             return SignalementSerializer(latest).data
         return None
 
     def get_gazole_signalement(self, obj):
         """Retourne le dernier signalement non expiré pour le gazole"""
-        latest = obj.get_latest_signalement_for_fuel('Gazole')
+        latest = obj.get_latest_signalement_for_fuel("Gazole")
         if latest:
             return SignalementSerializer(latest).data
         return None
 
     def get_distance(self, obj):
         """Retourne la distance si l'utilisateur a fourni sa position"""
-        return getattr(obj, 'distance', None)
-    
-    
+        return getattr(obj, "distance", None)
+
     def get_confidence_score(self, obj):
         return obj.get_confidence_score()
-    
-    
+
     def get_has_conflicting_reports(self, obj):
         return obj.has_conflicting_recent_reports()
+
     def validate(self, attrs):
         """Validation globale de la station"""
-        lat = attrs.get('latitude')
-        lon = attrs.get('longitude')
+        lat = attrs.get("latitude")
+        lon = attrs.get("longitude")
 
         if lat is not None and lon is not None:
-            if not (-90 <= lat <= 90):
+            if not (BAMAKO_BOUNDS["MIN_LAT"] <= lat <= BAMAKO_BOUNDS["MAX_LAT"]):
                 raise serializers.ValidationError(
-                    {"latitude": "La latitude doit être entre -90 et 90"}
+                    {
+                        "latitude": (
+                            "La latitude doit être dans la zone couverte de Bamako: "
+                            f"{BAMAKO_BOUNDS['MIN_LAT']} à {BAMAKO_BOUNDS['MAX_LAT']}"
+                        )
+                    }
                 )
-            if not (-180 <= lon <= 180):
+            if not (BAMAKO_BOUNDS["MIN_LON"] <= lon <= BAMAKO_BOUNDS["MAX_LON"]):
                 raise serializers.ValidationError(
-                    {"longitude": "La longitude doit être entre -180 et 180"}
+                    {
+                        "longitude": (
+                            "La longitude doit être dans la zone couverte de Bamako: "
+                            f"{BAMAKO_BOUNDS['MIN_LON']} à {BAMAKO_BOUNDS['MAX_LON']}"
+                        )
+                    }
                 )
 
         return attrs
