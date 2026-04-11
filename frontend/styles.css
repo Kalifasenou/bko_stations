@@ -782,6 +782,64 @@ body {
     padding: 16px;
 }
 
+#add-station-map {
+    height: 250px;
+    border-radius: 12px;
+    border: 2px solid rgba(0, 255, 65, 0.3);
+    margin-bottom: 12px;
+    z-index: 1;
+}
+
+#add-station-map .leaflet-tile-pane {
+    border-radius: 10px;
+}
+
+.add-station-success-banner {
+    background: var(--accent-green-dim);
+    color: var(--accent-green);
+    padding: 14px 16px;
+    border-radius: var(--radius-md);
+    font-size: 14px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 16px;
+    border: 1px solid var(--accent-green);
+    animation: successBannerPulse 0.5s ease-out;
+}
+
+@keyframes successBannerPulse {
+    0% {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+#add-station-map .leaflet-tile-pane {
+    border-radius: 10px;
+}
+
+.station-form-note {
+    display: block;
+    background: rgba(0, 255, 65, 0.1);
+    color: var(--accent-green);
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-bottom: 16px;
+    text-align: center;
+}
+
+.station-map-hint {
+    color: var(--text-secondary);
+    font-size: 12px;
+    text-align: center;
+    margin-bottom: 12px;
+}
+
 .view-header {
     margin-bottom: 16px;
 }
@@ -1296,6 +1354,164 @@ body {
     font-size: 14px;
 }
 
+/* ============================================
+   ADMIN BUTTON (in auth-bar)
+   ============================================ */
+.admin-btn {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--accent-yellow);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    padding: 4px;
+}
+
+.admin-btn:hover {
+    border-color: var(--accent-yellow);
+    background: var(--accent-yellow-dim);
+}
+
+.admin-btn svg {
+    width: 18px;
+    height: 18px;
+}
+
+/* ============================================
+   ADMIN VIEW - Pending Station Approvals
+   ============================================ */
+.admin-stations-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-bottom: 40px;
+}
+
+.admin-station-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    transition:
+        opacity 0.3s,
+        transform 0.3s;
+}
+
+.admin-station-card.approving {
+    border-color: var(--accent-green);
+    opacity: 0.6;
+    transform: scale(0.97);
+}
+
+.admin-station-card.rejecting {
+    border-color: var(--accent-red);
+    opacity: 0.6;
+    transform: scale(0.97);
+}
+
+.admin-station-card:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.admin-station-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.admin-station-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.admin-station-details {
+    margin-bottom: 12px;
+}
+
+.admin-station-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.admin-action-btn {
+    flex: 1;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: center;
+}
+
+.admin-approve-btn {
+    background: var(--accent-green-dim);
+    color: var(--accent-green);
+    border-color: var(--accent-green);
+}
+
+.admin-approve-btn:hover {
+    background: var(--accent-green);
+    color: var(--bg-primary);
+}
+
+.admin-reject-btn {
+    background: var(--accent-red-dim);
+    color: var(--accent-red);
+    border-color: var(--accent-red);
+}
+
+.admin-reject-btn:hover {
+    background: var(--accent-red);
+    color: var(--text-primary);
+}
+
+.admin-reject-confirm-btn {
+    background: var(--accent-red);
+    color: var(--text-primary);
+    border-color: var(--accent-red);
+    width: 100%;
+    margin-top: 8px;
+}
+
+.admin-reject-confirm-btn:hover {
+    opacity: 0.9;
+}
+
+.admin-reject-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border-color);
+}
+
+.admin-reject-input {
+    font-size: 13px;
+}
+
+.admin-coord-link {
+    color: var(--accent-green);
+    text-decoration: none;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.admin-coord-link:hover {
+    opacity: 0.8;
+    text-decoration: underline;
+}
+
 .alerts-list {
     display: flex;
     flex-direction: column;
@@ -1455,6 +1671,11 @@ body {
         padding-bottom: 100px;
     }
 
+    .admin-btn {
+        width: 36px;
+        height: 36px;
+    }
+
     .view-container.active {
         transform: translateX(0);
     }
@@ -1508,6 +1729,13 @@ body {
     /* Filters grid - 2 columns on mobile */
     .filters-grid {
         grid-template-columns: 1fr 1fr;
+    }
+}
+
+/* Desktop and tablet: taller mini-map */
+@media (min-width: 768px) {
+    #add-station-map {
+        height: 300px;
     }
 }
 

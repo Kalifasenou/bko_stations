@@ -180,15 +180,29 @@ class StationViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        # Check if coordinates are outside Bamako but within Mali (set by serializer.validate)
+        outside_bamako = serializer.context.get("outside_bamako", False)
+
+        # Build a coverage warning if applicable
+        coverage_warning = None
+        if outside_bamako:
+            coverage_warning = (
+                "Attention : cette station est en dehors de la zone de couverture principale (Bamako), "
+                "mais reste au Mali. Elle sera visible après validation par un administrateur."
+            )
+
         # Non-staff submissions go into pending state for admin review
         if not (request.user and request.user.is_staff):
             serializer.save(is_pending=True)
             headers = self.get_success_headers(serializer.data)
+            response_data = {
+                **serializer.data,
+                "message": "Station soumise avec succès. Elle sera visible après validation par un administrateur.",
+            }
+            if coverage_warning:
+                response_data["coverage_warning"] = coverage_warning
             return Response(
-                {
-                    **serializer.data,
-                    "message": "Station soumise avec succès. Elle sera visible après validation par un administrateur.",
-                },
+                response_data,
                 status=status.HTTP_201_CREATED,
                 headers=headers,
             )
@@ -196,9 +210,17 @@ class StationViewSet(viewsets.ModelViewSet):
         # Staff can create stations directly
         self.perform_create(serializer)
         headers = self.get_success_headers(serializer.data)
-        return Response(
-            serializer.data, status=status.HTTP_201_CREATED, headers=headers
-        )
+        response_data = serializer.data
+        if coverage_warning:
+            # For staff, return warning but allow creation
+            response_data = {
+                **serializer.data,
+                "coverage_warning": (
+                    "Cette station est en dehors de la zone de couverture principale (Bamako), "
+                    "mais reste au Mali."
+                ),
+            }
+        return Response(response_data, status=status.HTTP_201_CREATED, headers=headers)
 
     @action(detail=True, methods=["get"])
     def nearby(self, request, pk=None):

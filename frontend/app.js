@@ -27,6 +27,7 @@ const state = {
   lastUpdate: null,
   authToken: null,
   currentUser: null,
+  isStaff: false,
   electricityByStation: {},
   electricityZones: [],
   electricityRecommendation: null,
@@ -52,6 +53,8 @@ const state = {
     lastKnownLongitude: null,
     locationStatus: "",
   },
+  addStationMap: null,
+  addStationMarker: null,
   pagination: {
     page: 1,
     hasMore: true,
@@ -62,6 +65,7 @@ const state = {
 const AUTH_STORAGE_KEYS = {
   TOKEN: "bko_auth_token",
   USERNAME: "bko_auth_username",
+  IS_STAFF: "bko_auth_is_staff",
 };
 
 // ============================================
@@ -474,6 +478,8 @@ function initAuth() {
   state.authToken = localStorage.getItem(AUTH_STORAGE_KEYS.TOKEN);
   const savedUsername = localStorage.getItem(AUTH_STORAGE_KEYS.USERNAME);
   const savedPhone = localStorage.getItem("bko_auth_phone");
+  const savedIsStaff = localStorage.getItem(AUTH_STORAGE_KEYS.IS_STAFF);
+  state.isStaff = savedIsStaff === "true";
   state.currentUser = savedUsername
     ? { username: savedUsername, phone: savedPhone || "" }
     : null;
@@ -485,6 +491,14 @@ function initAuth() {
         return;
       }
       showAuthModal("login");
+    });
+  }
+
+  const adminBtn = document.getElementById("admin-btn");
+  if (adminBtn) {
+    adminBtn.addEventListener("click", () => {
+      switchView("admin");
+      elements.navButtons.forEach((b) => b.classList.remove("active"));
     });
   }
 
@@ -502,7 +516,7 @@ function updateAuthUI() {
         "utilisateur";
       elements.authInfo.textContent = `Connecté: ${display}`;
     } else {
-      elements.authInfo.textContent = "Mode invité";
+      elements.authInfo.textContent = "Pas besoin de compte ✨";
     }
   }
 
@@ -511,13 +525,20 @@ function updateAuthUI() {
       ? "Se déconnecter"
       : "Se connecter";
   }
+
+  const adminBtn = document.getElementById("admin-btn");
+  if (adminBtn) {
+    adminBtn.style.display = isAuthenticated && state.isStaff ? "flex" : "none";
+  }
 }
 
 function logout() {
   state.authToken = null;
   state.currentUser = null;
+  state.isStaff = false;
   localStorage.removeItem(AUTH_STORAGE_KEYS.TOKEN);
   localStorage.removeItem(AUTH_STORAGE_KEYS.USERNAME);
+  localStorage.removeItem(AUTH_STORAGE_KEYS.IS_STAFF);
   updateAuthUI();
   showToast("Déconnexion effectuée", "success");
 }
@@ -555,6 +576,7 @@ function showAuthModal(mode = "login") {
   modal.innerHTML = `
         <div class="modal-content auth-modal-content">
             <h3>${isLogin ? "Connexion" : "Créer un compte"}</h3>
+            <p style="font-size:13px;color:rgba(255,255,255,0.65);margin:0 0 12px 0;text-align:center;">💡 Un compte est optionnel — vous pouvez signaler sans vous inscrire</p>
             <div id="auth-feedback" class="auth-feedback" style="display:none;"></div>
             <form id="auth-form" class="auth-form">
                 ${
@@ -675,9 +697,11 @@ async function login(identifier, password) {
     username: payload.user?.username || identifier,
     phone: payload.user?.phone || identifier,
   };
+  state.isStaff = Boolean(payload.user?.is_staff);
   localStorage.setItem(AUTH_STORAGE_KEYS.TOKEN, payload.access);
   localStorage.setItem(AUTH_STORAGE_KEYS.USERNAME, state.currentUser.username);
   localStorage.setItem("bko_auth_phone", state.currentUser.phone);
+  localStorage.setItem(AUTH_STORAGE_KEYS.IS_STAFF, String(state.isStaff));
   updateAuthUI();
   showToast("Connexion réussie", "success");
 }
@@ -703,9 +727,11 @@ async function register(username, password, phone) {
     username: payload.user?.username || username,
     phone: payload.user?.phone || phone,
   };
+  state.isStaff = Boolean(payload.user?.is_staff);
   localStorage.setItem(AUTH_STORAGE_KEYS.TOKEN, payload.access);
   localStorage.setItem(AUTH_STORAGE_KEYS.USERNAME, state.currentUser.username);
   localStorage.setItem("bko_auth_phone", state.currentUser.phone);
+  localStorage.setItem(AUTH_STORAGE_KEYS.IS_STAFF, String(state.isStaff));
   updateAuthUI();
   showToast("Compte créé avec succès ! Connecté.", "success");
 }
@@ -1127,6 +1153,13 @@ function switchView(view) {
     .querySelectorAll(".view-container")
     .forEach((el) => el.classList.remove("active"));
 
+  // Cleanup add-station map when leaving that view
+  if (state.addStationMap) {
+    state.addStationMap.remove();
+    state.addStationMap = null;
+    state.addStationMarker = null;
+  }
+
   const isDesktop = window.innerWidth >= 768;
 
   switch (view) {
@@ -1165,6 +1198,12 @@ function switchView(view) {
         document.getElementById("map").style.display = "none";
       }
       showAddStationView();
+      break;
+    case "admin":
+      if (!isDesktop) {
+        document.getElementById("map").style.display = "none";
+      }
+      showAdminView();
       break;
   }
 }
@@ -1594,6 +1633,20 @@ function focusElectricityZone(_id, lat, lon) {
 
 window.focusElectricityZone = focusElectricityZone;
 
+function updateCoordinatesFromMap(lat, lng) {
+  const latInput = document.getElementById("station-lat-input");
+  const lonInput = document.getElementById("station-lon-input");
+  if (latInput) latInput.value = lat.toFixed(6);
+  if (lonInput) lonInput.value = lng.toFixed(6);
+  state.addStation.isPrefilledFromGeolocation = false;
+  state.addStation.locationStatus = "map";
+  setAddStationLocationStatus(
+    document.getElementById("add-station-form"),
+    `Position sélectionnée sur la carte (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
+    "success",
+  );
+}
+
 function showAddStationView() {
   let addView = document.getElementById("add-station-view");
   if (!addView) {
@@ -1604,10 +1657,28 @@ function showAddStationView() {
             <div class="view-header">
                 <h2>Ajouter une station</h2>
                 <p class="view-subtitle">
-                    Proposez une station : complétez les informations ci-dessous.
+                    Trouvez une station qui n'est pas sur la carte ? Ajoutez-la en quelques clics !
                 </p>
             </div>
+            <span class="station-form-note">Pas besoin de compte pour ajouter une station ✨</span>
             <form id="add-station-form" class="station-form">
+                <div id="add-station-map"></div>
+                <div class="station-map-hint">📍 Cliquez sur la carte pour placer la station</div>
+
+                <div class="form-grid">
+                    <div>
+                        <label class="form-label" for="station-lat-input">Latitude</label>
+                        <input id="station-lat-input" name="latitude" class="form-input" type="number" required step="any" min="-90" max="90" placeholder="12.6392">
+                    </div>
+                    <div>
+                        <label class="form-label" for="station-lon-input">Longitude</label>
+                        <input id="station-lon-input" name="longitude" class="form-input" type="number" required step="any" min="-180" max="180" placeholder="-8.0029">
+                    </div>
+                </div>
+
+                <button id="fill-station-location-btn" class="form-submit-btn" type="button" style="background:#00FF41;color:#0A0E14;">📍 Remplir depuis ma position</button>
+                <div id="station-location-status" style="margin-top: 6px; font-size: 12px;"></div>
+
                 <label class="form-label" for="station-name-input">Nom de la station *</label>
                 <input id="station-name-input" name="name" class="form-input" type="text" required maxlength="100" placeholder="Ex: Station ACI 2000">
 
@@ -1616,20 +1687,6 @@ function showAddStationView() {
 
                 <label class="form-label" for="station-address-input">Lieu / Adresse</label>
                 <input id="station-address-input" name="address" class="form-input" type="text" maxlength="255" placeholder="Ex: Badalabougou, Bamako">
-
-                <div class="form-grid">
-                    <div>
-                        <label class="form-label" for="station-lat-input">Latitude GPS *</label>
-                        <input id="station-lat-input" name="latitude" class="form-input" type="number" required step="any" min="-90" max="90" placeholder="12.6392">
-                    </div>
-                    <div>
-                        <label class="form-label" for="station-lon-input">Longitude GPS *</label>
-                        <input id="station-lon-input" name="longitude" class="form-input" type="number" required step="any" min="-180" max="180" placeholder="-8.0029">
-                    </div>
-                </div>
-
-                <button id="fill-station-location-btn" class="form-submit-btn" type="button" style="background:#00FF41;color:#0A0E14;">Remplir depuis ma position</button>
-                <div id="station-location-status" style="margin-top: 6px; font-size: 12px;"></div>
 
                 <label class="form-label" for="station-manager-input">Nom du gérant</label>
                 <input id="station-manager-input" name="manager_name" class="form-input" type="text" maxlength="100" placeholder="Ex: Moussa Traoré">
@@ -1643,7 +1700,302 @@ function showAddStationView() {
   const form = addView.querySelector("#add-station-form");
   setupAddStationForm(form);
   addView.classList.add("active");
+
+  // Initialize Leaflet mini-map for location picking
+  setTimeout(() => {
+    if (state.addStationMap) {
+      state.addStationMap.remove();
+      state.addStationMap = null;
+      state.addStationMarker = null;
+    }
+
+    const mapContainer = document.getElementById("add-station-map");
+    if (!mapContainer) return;
+
+    const mapCenter = state.userLocation
+      ? [state.userLocation.lat, state.userLocation.lng]
+      : CONFIG.MAP_CENTER;
+    const mapZoom = state.userLocation ? 15 : CONFIG.MAP_ZOOM;
+
+    const map = L.map("add-station-map", {
+      center: mapCenter,
+      zoom: mapZoom,
+      zoomControl: true,
+      attributionControl: false,
+    });
+
+    L.tileLayer(
+      "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+      { maxZoom: 19 },
+    ).addTo(map);
+
+    // Handle map click to place/move marker
+    map.on("click", function (e) {
+      const { lat, lng } = e.latlng;
+
+      if (state.addStationMarker) {
+        state.addStationMarker.setLatLng([lat, lng]);
+      } else {
+        state.addStationMarker = L.marker([lat, lng], {
+          draggable: true,
+        }).addTo(map);
+
+        state.addStationMarker.on("dragend", function () {
+          const pos = state.addStationMarker.getLatLng();
+          updateCoordinatesFromMap(pos.lat, pos.lng);
+        });
+      }
+
+      updateCoordinatesFromMap(lat, lng);
+    });
+
+    state.addStationMap = map;
+
+    // Fix map rendering after container is fully laid out
+    setTimeout(() => {
+      if (state.addStationMap) {
+        state.addStationMap.invalidateSize();
+      }
+    }, 200);
+  }, 100);
 }
+
+// ============================================
+// ADMIN VIEW - Pending Station Approvals
+// ============================================
+function showAdminView() {
+  if (!state.isStaff) {
+    showToast("Accès réservé aux administrateurs", "error");
+    return;
+  }
+
+  let adminView = document.getElementById("admin-view");
+  if (!adminView) {
+    adminView = document.createElement("div");
+    adminView.id = "admin-view";
+    adminView.className = "view-container";
+    adminView.innerHTML = `
+            <div class="view-header">
+                <h2>⚙️ Administration</h2>
+                <p class="view-subtitle">Stations en attente de validation</p>
+            </div>
+            <div id="admin-stations-list" class="admin-stations-list">
+                <div class="empty-state">Chargement des stations en attente...</div>
+            </div>
+        `;
+    document.body.appendChild(adminView);
+  }
+
+  adminView.classList.add("active");
+  loadPendingStations();
+}
+
+async function loadPendingStations() {
+  const container = document.getElementById("admin-stations-list");
+  if (!container) return;
+
+  container.innerHTML = '<div class="empty-state">Chargement...</div>';
+
+  try {
+    const response = await fetch(
+      `${CONFIG.API_BASE_URL}/stations/?page_size=100`,
+      {
+        headers: {
+          ...getAuthHeaders(),
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error("Erreur lors du chargement des stations");
+    }
+
+    const data = await response.json();
+    // Handle paginated response: DRF returns {count, next, results}
+    const allStations = Array.isArray(data) ? data : data.results || [];
+    // Filter client-side: only show pending stations
+    const pendingStations = allStations.filter((s) => s.is_pending === true);
+
+    if (pendingStations.length === 0) {
+      container.innerHTML =
+        '<div class="empty-state">Aucune station en attente de validation 🎉</div>';
+      return;
+    }
+
+    container.innerHTML = pendingStations
+      .map(
+        (station) => `
+            <div class="admin-station-card" data-station-id="${station.id}">
+                <div class="admin-station-header">
+                    <span class="admin-station-name">${station.name || "Sans nom"}</span>
+                    <span class="admin-station-brand brand-badge">${station.brand || ""}</span>
+                </div>
+                <div class="admin-station-details">
+                    <div class="detail-row">
+                        <span class="detail-label">Adresse</span>
+                        <span class="detail-value">${station.address || "—"}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Coordonnées</span>
+                        <span class="detail-value">
+                            <a href="#" class="admin-coord-link" onclick="focusAdminStationOnMap(event, ${station.latitude}, ${station.longitude})">${Number(station.latitude).toFixed(5)}, ${Number(station.longitude).toFixed(5)}</a>
+                        </span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Soumise le</span>
+                        <span class="detail-value">${station.created_at ? new Date(station.created_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</span>
+                    </div>
+                    ${station.manager_name ? `<div class="detail-row"><span class="detail-label">Gérant</span><span class="detail-value">${station.manager_name}</span></div>` : ""}
+                    ${station.submitted_by ? `<div class="detail-row"><span class="detail-label">Soumise par</span><span class="detail-value">${station.submitted_by}</span></div>` : ""}
+                </div>
+                <div class="admin-station-actions">
+                    <button class="admin-action-btn admin-approve-btn" onclick="approveStation(${station.id})">
+                        ✅ Approuver
+                    </button>
+                    <button class="admin-action-btn admin-reject-btn" onclick="toggleRejectForm(${station.id})">
+                        ❌ Rejeter
+                    </button>
+                </div>
+                <div class="admin-reject-form" id="reject-form-${station.id}" style="display:none;">
+                    <input type="text" class="form-input admin-reject-input" id="reject-reason-${station.id}" placeholder="Raison du rejet (optionnel)" />
+                    <button class="admin-action-btn admin-reject-confirm-btn" onclick="rejectStation(${station.id})">Confirmer le rejet</button>
+                </div>
+            </div>
+        `,
+      )
+      .join("");
+  } catch (error) {
+    console.error("Error loading pending stations:", error);
+    container.innerHTML =
+      '<div class="empty-state">Erreur lors du chargement</div>';
+    showToast("Erreur lors du chargement des stations", "error");
+  }
+}
+
+function toggleRejectForm(stationId) {
+  const form = document.getElementById(`reject-form-${stationId}`);
+  if (form) {
+    form.style.display = form.style.display === "none" ? "flex" : "none";
+  }
+}
+
+async function approveStation(stationId) {
+  const card = document.querySelector(
+    `.admin-station-card[data-station-id="${stationId}"]`,
+  );
+  try {
+    const response = await fetch(
+      `${CONFIG.API_BASE_URL}/stations/${stationId}/approve/`,
+      {
+        method: "POST",
+        headers: {
+          ...getAuthHeaders(),
+          "Content-Type": "application/json",
+        },
+      },
+    );
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.detail || "Erreur lors de l'approbation");
+    }
+
+    showToast("Station approuvée avec succès ✅", "success");
+
+    // Remove the card with animation
+    if (card) {
+      card.style.transition = "opacity 0.3s, transform 0.3s";
+      card.style.opacity = "0";
+      card.style.transform = "translateX(50px)";
+      setTimeout(() => {
+        card.remove();
+        // Check if list is empty
+        const remaining = document.querySelectorAll(".admin-station-card");
+        if (remaining.length === 0) {
+          const container = document.getElementById("admin-stations-list");
+          if (container) {
+            container.innerHTML =
+              '<div class="empty-state">Aucune station en attente de validation 🎉</div>';
+          }
+        }
+      }, 300);
+    }
+
+    // Refresh map stations in background
+    refreshStations({ keepSelection: true, showToastOnError: false });
+  } catch (error) {
+    console.error("Error approving station:", error);
+    showToast(error.message || "Erreur lors de l'approbation", "error");
+  }
+}
+
+async function rejectStation(stationId) {
+  const reasonInput = document.getElementById(`reject-reason-${stationId}`);
+  const reason = reasonInput ? reasonInput.value.trim() : "";
+  const card = document.querySelector(
+    `.admin-station-card[data-station-id="${stationId}"]`,
+  );
+
+  try {
+    const response = await fetch(
+      `${CONFIG.API_BASE_URL}/stations/${stationId}/reject/`,
+      {
+        method: "POST",
+        headers: {
+          ...getAuthHeaders(),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ reason }),
+      },
+    );
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.detail || "Erreur lors du rejet");
+    }
+
+    showToast("Station rejetée ❌", "success");
+
+    // Remove the card with animation
+    if (card) {
+      card.style.transition = "opacity 0.3s, transform 0.3s";
+      card.style.opacity = "0";
+      card.style.transform = "translateX(-50px)";
+      setTimeout(() => {
+        card.remove();
+        // Check if list is empty
+        const remaining = document.querySelectorAll(".admin-station-card");
+        if (remaining.length === 0) {
+          const container = document.getElementById("admin-stations-list");
+          if (container) {
+            container.innerHTML =
+              '<div class="empty-state">Aucune station en attente de validation 🎉</div>';
+          }
+        }
+      }, 300);
+    }
+  } catch (error) {
+    console.error("Error rejecting station:", error);
+    showToast(error.message || "Erreur lors du rejet", "error");
+  }
+}
+
+function focusAdminStationOnMap(event, lat, lng) {
+  event.preventDefault();
+  // Switch to map view and center on station
+  switchView("map");
+  elements.navButtons.forEach((b) => b.classList.remove("active"));
+  elements.navButtons[0].classList.add("active");
+  if (state.map) {
+    state.map.setView([lat, lng], 16);
+  }
+}
+
+// Expose admin functions globally for onclick handlers
+window.approveStation = approveStation;
+window.rejectStation = rejectStation;
+window.toggleRejectForm = toggleRejectForm;
+window.focusAdminStationOnMap = focusAdminStationOnMap;
 
 function parseCoordinate(value) {
   const parsed = Number.parseFloat(value);
@@ -1758,6 +2110,22 @@ async function fillStationLocationFromCurrentPosition(form) {
     state.addStation.lastKnownLongitude = lngRounded;
     state.addStation.locationStatus = "gps";
 
+    // Update marker on mini-map if visible
+    if (state.addStationMap) {
+      if (state.addStationMarker) {
+        state.addStationMarker.setLatLng([latRounded, lngRounded]);
+      } else {
+        state.addStationMarker = L.marker([latRounded, lngRounded], {
+          draggable: true,
+        }).addTo(state.addStationMap);
+        state.addStationMarker.on("dragend", function () {
+          const pos = state.addStationMarker.getLatLng();
+          updateCoordinatesFromMap(pos.lat, pos.lng);
+        });
+      }
+      state.addStationMap.setView([latRounded, lngRounded], 15);
+    }
+
     setAddStationLocationStatus(
       form,
       `Position préremplie depuis votre GPS (${latRounded}, ${lngRounded}).`,
@@ -1841,7 +2209,10 @@ async function handleAddStationSubmit(event) {
     const sourceLabel = state.addStation.isPrefilledFromGeolocation
       ? " (position détectée)"
       : "";
-    showToast(`Station ajoutée avec succès${sourceLabel}`, "success");
+    showToast(
+      `Station soumise ! Elle sera visible après validation par un admin 📋`,
+      "success",
+    );
 
     form.reset();
     state.addStation.isPrefilledFromGeolocation = false;
@@ -1850,6 +2221,18 @@ async function handleAddStationSubmit(event) {
       "Prête pour une nouvelle station.",
       "info",
     );
+
+    // Show temporary success banner inside form
+    const successBanner = document.createElement("div");
+    successBanner.className = "add-station-success-banner";
+    successBanner.textContent =
+      "Votre proposition de station a bien été envoyée. Un administrateur la vérifiera bientôt.";
+    form.prepend(successBanner);
+    setTimeout(() => {
+      if (successBanner.parentNode) {
+        successBanner.remove();
+      }
+    }, 5000);
 
     await refreshStations({ keepSelection: false, showToastOnError: true });
 

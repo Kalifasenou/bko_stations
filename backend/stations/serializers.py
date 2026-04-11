@@ -5,6 +5,7 @@ from .constants import (
     ELECTRICITY_STATUS,
     FUEL_STATUS,
     FUEL_TYPES,
+    MALI_BOUNDS,
 )
 from .models import ElectriciteSignalement, Signalement, Station, ZoneElectrique
 
@@ -284,28 +285,52 @@ class StationSerializer(serializers.ModelSerializer):
         return obj.has_conflicting_recent_reports()
 
     def validate(self, attrs):
-        """Validation globale de la station"""
+        """Validation globale de la station
+
+        Two-level coordinate validation:
+        1. Reject if coordinates are outside Mali (hard block)
+        2. Flag a warning if coordinates are outside Bamako but within Mali
+        """
         lat = attrs.get("latitude")
         lon = attrs.get("longitude")
 
         if lat is not None and lon is not None:
-            if not (BAMAKO_BOUNDS["MIN_LAT"] <= lat <= BAMAKO_BOUNDS["MAX_LAT"]):
-                raise serializers.ValidationError(
-                    {
-                        "latitude": (
-                            "La latitude doit être dans la zone couverte de Bamako: "
-                            f"{BAMAKO_BOUNDS['MIN_LAT']} à {BAMAKO_BOUNDS['MAX_LAT']}"
-                        )
-                    }
-                )
-            if not (BAMAKO_BOUNDS["MIN_LON"] <= lon <= BAMAKO_BOUNDS["MAX_LON"]):
-                raise serializers.ValidationError(
-                    {
-                        "longitude": (
-                            "La longitude doit être dans la zone couverte de Bamako: "
-                            f"{BAMAKO_BOUNDS['MIN_LON']} à {BAMAKO_BOUNDS['MAX_LON']}"
-                        )
-                    }
-                )
+            # Level 1: Check if coordinates are within Mali
+            if not (
+                MALI_BOUNDS["MIN_LAT"] <= lat <= MALI_BOUNDS["MAX_LAT"]
+                and MALI_BOUNDS["MIN_LON"] <= lon <= MALI_BOUNDS["MAX_LON"]
+            ):
+                errors = {}
+                if not (MALI_BOUNDS["MIN_LAT"] <= lat <= MALI_BOUNDS["MAX_LAT"]):
+                    errors["latitude"] = (
+                        "Les coordonnées doivent être au Mali. "
+                        f"Latitude valide: {MALI_BOUNDS['MIN_LAT']} à {MALI_BOUNDS['MAX_LAT']}"
+                    )
+                if not (MALI_BOUNDS["MIN_LON"] <= lon <= MALI_BOUNDS["MAX_LON"]):
+                    errors["longitude"] = (
+                        "Les coordonnées doivent être au Mali. "
+                        f"Longitude valide: {MALI_BOUNDS['MIN_LON']} à {MALI_BOUNDS['MAX_LON']}"
+                    )
+                raise serializers.ValidationError(errors)
+
+            # Level 2: Check if coordinates are within Bamako coverage area (warning only)
+            outside_bamako = False
+            if not (
+                BAMAKO_BOUNDS["MIN_LAT"] <= lat <= BAMAKO_BOUNDS["MAX_LAT"]
+                and BAMAKO_BOUNDS["MIN_LON"] <= lon <= BAMAKO_BOUNDS["MAX_LON"]
+            ):
+                outside_bamako = True
+                # Store flag in context so the view can include a warning in the response
+                self.context["outside_bamako"] = True
+
+                out_of_range_parts = []
+                if not (BAMAKO_BOUNDS["MIN_LAT"] <= lat <= BAMAKO_BOUNDS["MAX_LAT"]):
+                    out_of_range_parts.append("latitude")
+                if not (BAMAKO_BOUNDS["MIN_LON"] <= lon <= BAMAKO_BOUNDS["MAX_LON"]):
+                    out_of_range_parts.append("longitude")
+                self.context["outside_bamako_fields"] = out_of_range_parts
+
+            if not outside_bamako:
+                self.context["outside_bamako"] = False
 
         return attrs
