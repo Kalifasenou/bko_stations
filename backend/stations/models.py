@@ -408,3 +408,30 @@ class UserProfile(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.phone or 'Pas de téléphone'}"
+
+
+class UserFavorite(models.Model):
+    """Station favorite d'un utilisateur"""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="favorite_stations",
+        verbose_name="Utilisateur",
+    )
+    station = models.ForeignKey(
+        Station,
+        on_delete=models.CASCADE,
+        related_name="favorited_by",
+        verbose_name="Station",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Date d'ajout")
+
+    class Meta:
+        verbose_name = "Favori"
+        verbose_name_plural = "Favoris"
+        unique_together = ("user", "station")
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.user.username} → {self.station.name}"

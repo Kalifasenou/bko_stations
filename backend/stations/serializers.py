@@ -7,7 +7,13 @@ from .constants import (
     FUEL_TYPES,
     MALI_BOUNDS,
 )
-from .models import ElectriciteSignalement, Signalement, Station, ZoneElectrique
+from .models import (
+    ElectriciteSignalement,
+    Signalement,
+    Station,
+    UserFavorite,
+    ZoneElectrique,
+)
 
 
 class SignalementSerializer(serializers.ModelSerializer):
@@ -334,3 +340,12 @@ class StationSerializer(serializers.ModelSerializer):
                 self.context["outside_bamako"] = False
 
         return attrs
+
+
+class UserFavoriteSerializer(serializers.ModelSerializer):
+    station_detail = StationSerializer(source="station", read_only=True)
+
+    class Meta:
+        model = UserFavorite
+        fields = ["id", "station", "station_detail", "created_at"]
+        read_only_fields = ["id", "created_at"]

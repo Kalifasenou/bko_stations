@@ -26,7 +26,13 @@ from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import ElectriciteSignalement, Signalement, Station, ZoneElectrique
+from .models import (
+    ElectriciteSignalement,
+    Signalement,
+    Station,
+    UserFavorite,
+    ZoneElectrique,
+)
 from .permissions import (
     IsAdminOrReadOnly,
     IsAdminOrReadOnlyWithPublicCreate,
@@ -36,6 +42,7 @@ from .serializers import (
     ElectriciteSignalementSerializer,
     SignalementSerializer,
     StationSerializer,
+    UserFavoriteSerializer,
     ZoneElectriqueSerializer,
 )
 from .utils import (
@@ -180,16 +187,34 @@ class StationViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        # Check for nearby duplicate stations (within ~500m)
+        lat = serializer.validated_data.get("latitude")
+        lon = serializer.validated_data.get("longitude")
+        coverage_warning = ""
+        if lat is not None and lon is not None:
+            nearby_stations = Station.objects.filter(
+                is_active=True,
+                latitude__range=(lat - 0.005, lat + 0.005),
+                longitude__range=(lon - 0.005, lon + 0.005),
+            )
+            if nearby_stations.exists():
+                nearby_data = StationSerializer(nearby_stations, many=True).data
+                if len(nearby_data) == 1:
+                    coverage_warning += (
+                        "Attention: une station existe déjà à proximité."
+                    )
+                else:
+                    coverage_warning += f"Attention: {len(nearby_data)} stations existent déjà à proximité."
+
         # Check if coordinates are outside Bamako but within Mali (set by serializer.validate)
         outside_bamako = serializer.context.get("outside_bamako", False)
 
         # Build a coverage warning if applicable
-        coverage_warning = None
         if outside_bamako:
-            coverage_warning = (
-                "Attention : cette station est en dehors de la zone de couverture principale (Bamako), "
-                "mais reste au Mali. Elle sera visible après validation par un administrateur."
-            )
+            if coverage_warning:
+                coverage_warning += " Attention : cette station est en dehors de la zone de couverture principale (Bamako), mais reste au Mali. Elle sera visible après validation par un administrateur."
+            else:
+                coverage_warning = "Attention : cette station est en dehors de la zone de couverture principale (Bamako), mais reste au Mali. Elle sera visible après validation par un administrateur."
 
         # Non-staff submissions go into pending state for admin review
         if not (request.user and request.user.is_staff):
@@ -215,10 +240,7 @@ class StationViewSet(viewsets.ModelViewSet):
             # For staff, return warning but allow creation
             response_data = {
                 **serializer.data,
-                "coverage_warning": (
-                    "Cette station est en dehors de la zone de couverture principale (Bamako), "
-                    "mais reste au Mali."
-                ),
+                "coverage_warning": coverage_warning,
             }
         return Response(response_data, status=status.HTTP_201_CREATED, headers=headers)
 
@@ -1495,3 +1517,168 @@ def monitoring_overview(request):
             {"status": "error", "error": str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def station_timeline(request, pk):
+    """Retourne l'historique des signalements pour une station"""
+    station = get_object_or_404(Station, pk=pk)
+    hours = int(request.query_params.get("hours", 24))
+    if hours <= 0 or hours > 168:
+        hours = 24
+    threshold = timezone.now() - timedelta(hours=hours)
+    signalements = Signalement.objects.filter(
+        station=station, timestamp__gte=threshold, fuel_type__in=["Essence", "Gazole"]
+    ).order_by("-timestamp")
+    serializer = SignalementSerializer(signalements, many=True)
+    return Response(
+        {
+            "station": StationSerializer(station).data,
+            "signalements": serializer.data,
+            "count": len(serializer.data),
+        }
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def admin_statistics(request):
+    """Retourne les statistiques pour le dashboard admin"""
+    if not request.user.is_staff:
+        return Response(
+            {"error": "Accès réservé aux administrateurs"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    now = timezone.now()
+    four_hours_ago = now - timedelta(hours=4)
+    twenty_four_hours_ago = now - timedelta(hours=24)
+    seven_days_ago = now - timedelta(days=7)
+
+    # Core stats
+    total_stations = Station.objects.filter(is_active=True).count()
+    pending_stations = Station.objects.filter(is_pending=True).count()
+    total_signalements_24h = Signalement.objects.filter(
+        timestamp__gte=twenty_four_hours_ago, fuel_type__in=["Essence", "Gazole"]
+    ).count()
+
+    stations_with_fuel = (
+        Station.objects.filter(
+            is_active=True,
+            signalements__timestamp__gte=four_hours_ago,
+            signalements__fuel_type__in=["Essence", "Gazole"],
+            signalements__status="Disponible",
+        )
+        .distinct()
+        .count()
+    )
+
+    stations_empty = (
+        Station.objects.filter(
+            is_active=True,
+            signalements__timestamp__gte=four_hours_ago,
+            signalements__fuel_type__in=["Essence", "Gazole"],
+            signalements__status="Épuisé",
+        )
+        .exclude(
+            signalements__timestamp__gte=four_hours_ago,
+            signalements__fuel_type__in=["Essence", "Gazole"],
+            signalements__status="Disponible",
+        )
+        .distinct()
+        .count()
+    )
+
+    total_users = get_user_model().objects.count()
+
+    # Signalements trend (last 7 days, grouped by day)
+    daily_signalements = []
+    for i in range(7):
+        day_start = now - timedelta(days=i + 1)
+        day_end = now - timedelta(days=i)
+        count = Signalement.objects.filter(
+            timestamp__gte=day_start,
+            timestamp__lt=day_end,
+            fuel_type__in=["Essence", "Gazole"],
+        ).count()
+        daily_signalements.append(
+            {
+                "date": day_start.strftime("%Y-%m-%d"),
+                "count": count,
+            }
+        )
+
+    # Stats by brand
+    brands = (
+        Station.objects.filter(is_active=True)
+        .values("brand")
+        .annotate(
+            total=Count("id"),
+        )
+        .order_by("-total")
+    )
+
+    # Electricity stats
+    electricity_zones = ZoneElectrique.objects.filter(is_active=True).count()
+    electricity_signalements_24h = ElectriciteSignalement.objects.filter(
+        timestamp__gte=twenty_four_hours_ago
+    ).count()
+
+    return Response(
+        {
+            "total_stations": total_stations,
+            "pending_stations": pending_stations,
+            "stations_with_fuel": stations_with_fuel,
+            "stations_empty": stations_empty,
+            "stations_unknown": total_stations - stations_with_fuel - stations_empty,
+            "total_signalements_24h": total_signalements_24h,
+            "total_users": total_users,
+            "electricity_zones": electricity_zones,
+            "electricity_signalements_24h": electricity_signalements_24h,
+            "daily_signalements": daily_signalements,
+            "brands": list(brands),
+        }
+    )
+
+
+@api_view(["GET", "POST", "DELETE"])
+@permission_classes([IsAuthenticated])
+def user_favorites(request, station_id=None):
+    """Gérer les stations favorites de l'utilisateur"""
+    if request.method == "GET":
+        favorites = UserFavorite.objects.filter(user=request.user).select_related(
+            "station"
+        )
+        serializer = StationSerializer([f.station for f in favorites], many=True)
+        return Response(serializer.data)
+
+    elif request.method == "POST":
+        if not station_id:
+            return Response(
+                {"error": "station_id est requis"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        station = get_object_or_404(Station, pk=station_id)
+        favorite, created = UserFavorite.objects.get_or_create(
+            user=request.user, station=station
+        )
+        if not created:
+            return Response({"message": "Déjà en favori"}, status=status.HTTP_200_OK)
+        return Response(
+            {"message": "Ajouté aux favoris"}, status=status.HTTP_201_CREATED
+        )
+
+    elif request.method == "DELETE":
+        if not station_id:
+            return Response(
+                {"error": "station_id est requis"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        favorite = UserFavorite.objects.filter(
+            user=request.user, station_id=station_id
+        ).first()
+        if not favorite:
+            return Response(
+                {"error": "Favori non trouvé"}, status=status.HTTP_404_NOT_FOUND
+            )
+        favorite.delete()
+        return Response({"message": "Retiré des favoris"}, status=status.HTTP_200_OK)
