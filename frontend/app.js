@@ -106,6 +106,47 @@ const elements = {
 };
 
 // ============================================
+// LAYOUT HELPERS
+// ============================================
+
+function isSidebarMode() {
+  return window.innerWidth >= 768;
+}
+
+function getViewContainer() {
+  if (isSidebarMode()) {
+    const sidebar = document.querySelector(".sidebar-content");
+    if (sidebar) return sidebar;
+  }
+  return document.body;
+}
+
+function moveViewsToContainer() {
+  const container = getViewContainer();
+  document.querySelectorAll(".view-container").forEach((view) => {
+    if (view.parentElement !== container) {
+      container.appendChild(view);
+    }
+  });
+  // Invalidate map size after layout shift
+  if (state.map) {
+    setTimeout(() => state.map.invalidateSize(), 150);
+  }
+}
+
+// Handle window resize: move views between sidebar and body
+let resizeTimeout;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimeout);
+  resizeTimeout = setTimeout(() => {
+    moveViewsToContainer();
+    if (state.map) {
+      state.map.invalidateSize();
+    }
+  }, 150);
+});
+
+// ============================================
 // INITIALIZATION
 // ============================================
 document.addEventListener("DOMContentLoaded", () => {
@@ -121,6 +162,9 @@ async function initApp() {
 
     // Setup event listeners
     setupEventListeners();
+
+    // Move any existing view containers to sidebar if in sidebar mode
+    moveViewsToContainer();
 
     // Get user location first (core UX)
     await getUserLocation();
@@ -145,9 +189,13 @@ async function initApp() {
     // Setup PWA
     setupPWA();
 
-    // Hide loading
+    // Hide loading and invalidate map size for sidebar layout
     setTimeout(() => {
       elements.loading.classList.add("hidden");
+      // Ensure map renders correctly within the sidebar offset layout
+      if (state.map) {
+        state.map.invalidateSize();
+      }
     }, 700);
   } catch (error) {
     console.error("Error initializing app:", error);
@@ -1160,12 +1208,12 @@ function switchView(view) {
     state.addStationMarker = null;
   }
 
-  const isDesktop = window.innerWidth >= 768;
+  const sidebarMode = isSidebarMode();
 
   switch (view) {
     case "map":
-      // On desktop, map is always visible behind overlays
-      if (!isDesktop) {
+      // On mobile, show the map; on sidebar mode, map is always visible
+      if (!sidebarMode) {
         document.getElementById("map").style.display = "block";
       }
       closeStationSheet();
@@ -1173,38 +1221,49 @@ function switchView(view) {
         if (state.map) {
           state.map.invalidateSize();
         }
-      }, 0);
+      }, 50);
       break;
     case "list":
-      if (!isDesktop) {
+      if (!sidebarMode) {
         document.getElementById("map").style.display = "none";
       }
       showListView();
       break;
     case "alerts":
-      if (!isDesktop) {
+      if (!sidebarMode) {
         document.getElementById("map").style.display = "none";
       }
       showAlertsView();
       break;
     case "electricity":
-      if (!isDesktop) {
+      if (!sidebarMode) {
         document.getElementById("map").style.display = "none";
       }
       showElectricityView();
       break;
     case "add-station":
-      if (!isDesktop) {
+      if (!sidebarMode) {
         document.getElementById("map").style.display = "none";
       }
       showAddStationView();
       break;
     case "admin":
-      if (!isDesktop) {
+      if (!sidebarMode) {
         document.getElementById("map").style.display = "none";
       }
       showAdminView();
       break;
+  }
+
+  // On sidebar mode, ensure views are in the sidebar content area
+  if (sidebarMode) {
+    moveViewsToContainer();
+    // Invalidate map after sidebar layout adjusts
+    setTimeout(() => {
+      if (state.map) {
+        state.map.invalidateSize();
+      }
+    }, 100);
   }
 }
 
@@ -1249,7 +1308,7 @@ function showListView() {
             </div>
             <div class="station-list" id="station-list-container"></div>
         `;
-    document.body.appendChild(listView);
+    getViewContainer().appendChild(listView);
 
     const queryInput = listView.querySelector("#search-input");
     if (queryInput) {
@@ -1327,7 +1386,7 @@ function showAlertsView() {
             </div>
             <div class="alerts-list" id="alerts-list-container"></div>
         `;
-    document.body.appendChild(alertsView);
+    getViewContainer().appendChild(alertsView);
   }
 
   // Get recent signalements
@@ -1596,7 +1655,7 @@ function showElectricityView() {
             <div id="electricity-recommendation-box" class="alerts-list"></div>
             <div id="electricity-list-container" class="station-list"></div>
         `;
-    document.body.appendChild(electricityView);
+    getViewContainer().appendChild(electricityView);
   }
 
   const statusSelect = electricityView.querySelector(
@@ -1694,7 +1753,7 @@ function showAddStationView() {
                 <button id="add-station-submit" class="form-submit-btn" type="submit">Enregistrer la station</button>
             </form>
         `;
-    document.body.appendChild(addView);
+    getViewContainer().appendChild(addView);
   }
 
   const form = addView.querySelector("#add-station-form");
@@ -1783,7 +1842,7 @@ function showAdminView() {
                 <div class="empty-state">Chargement des stations en attente...</div>
             </div>
         `;
-    document.body.appendChild(adminView);
+    getViewContainer().appendChild(adminView);
   }
 
   adminView.classList.add("active");
