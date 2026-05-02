@@ -885,7 +885,6 @@ function updateSyncIndicator() {
 // ============================================
 async function reportAvailability(fuelType, status, comment = "") {
   if (!state.selectedStation) return;
-  if (!requireAuth("envoyer un commentaire/réaction")) return;
 
   // Disable buttons
   elements.btnAvailable.disabled = true;
@@ -1073,10 +1072,6 @@ function setupEventListeners() {
 // FUEL TYPE SELECTOR
 // ============================================
 function showFuelTypeSelector(status) {
-  if (!requireAuth("envoyer un commentaire/réaction")) {
-    return;
-  }
-
   // Create modal if not exists
   let modal = document.getElementById("fuel-type-modal");
   if (!modal) {
@@ -1129,7 +1124,6 @@ function showFuelTypeSelector(status) {
 
 async function reportElectricityByZone(status, comment = "") {
   if (!state.selectedStation) return;
-  if (!requireAuth("signaler l'électricité")) return;
 
   try {
     const lookupUrl = new URL(

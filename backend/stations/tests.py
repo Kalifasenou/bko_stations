@@ -254,14 +254,14 @@ class SignalementAPITests(APITestCase):
         )
 
     def test_create_signalement(self):
-        """Test la création d'un signalement"""
+        """Test la création d'un signalement (anonyme autorisé avec rate-limiting)"""
         data = {
             "station": self.station.id,
             "fuel_type": "Essence",
             "status": "Disponible",
         }
         response = self.client.post("/api/signalements/", data)
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
     def test_create_signalement_authenticated(self):
         """Test la création d'un signalement avec JWT"""
@@ -282,10 +282,10 @@ class SignalementAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
     def test_create_signalement_missing_station(self):
-        """Test que la création échoue sans station (requiert auth)"""
+        """Test que la création échoue sans station (champ requis)"""
         data = {"fuel_type": "Essence", "status": "Disponible"}
         response = self.client.post("/api/signalements/", data)
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_latest_signalements(self):
         """Test la récupération des derniers signalements"""
