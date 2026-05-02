@@ -91,13 +91,48 @@ class StationViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminOrReadOnlyWithPublicCreate]
     pagination_class = StandardResultsSetPagination
 
+    def list(self, request, *args, **kwargs):
+        """List stations with detailed error logging.
+
+        Wraps the default list() to log the actual exception when the endpoint
+        crashes (typical case: missing column in prod DB after a migration
+        was not applied). Without this wrapper, the user only sees a generic
+        Django 500 HTML page and nothing in the logs.
+        """
+        try:
+            return super().list(request, *args, **kwargs)
+        except Exception as exc:
+            logger.exception("StationViewSet.list crashed: %s", exc)
+            return Response(
+                {
+                    "error": "Erreur serveur lors du chargement des stations",
+                    "detail": str(exc),
+                    "hint": "Vérifiez que toutes les migrations ont été appliquées (python manage.py migrate)",
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
     def get_queryset(self):
         # Public users only see active, approved stations
         # Staff can see all stations including pending ones
-        if self.request.user and self.request.user.is_staff:
-            queryset = Station.objects.all()
-        else:
-            queryset = Station.objects.filter(is_active=True, is_pending=False)
+        is_staff = bool(
+            self.request.user
+            and self.request.user.is_authenticated
+            and self.request.user.is_staff
+        )
+        try:
+            if is_staff:
+                queryset = Station.objects.all()
+            else:
+                queryset = Station.objects.filter(is_active=True, is_pending=False)
+        except Exception as exc:
+            # Defensive fallback: if `is_pending` column is missing in prod DB
+            # (migration 0009 not applied yet), fall back to is_active only.
+            logger.error(
+                "get_queryset() failed with is_pending filter (probably missing column): %s",
+                exc,
+            )
+            queryset = Station.objects.filter(is_active=True)
 
         # Filtrer par brand si fourni
         brand = self.request.query_params.get("brand")
