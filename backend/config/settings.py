@@ -10,10 +10,11 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 
-from pathlib import Path
 import os
 import sys
 from datetime import timedelta
+from pathlib import Path
+
 from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -23,24 +24,24 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
-IS_TESTING = 'test' in sys.argv
-ENVIRONMENT = os.getenv('ENVIRONMENT', 'development').lower()
-IS_PRODUCTION = ENVIRONMENT == 'production'
+IS_TESTING = "test" in sys.argv
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
+IS_PRODUCTION = ENVIRONMENT == "production"
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
+DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY')
+SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
     if IS_PRODUCTION and not IS_TESTING:
-        raise ImproperlyConfigured('SECRET_KEY must be set in production')
-    SECRET_KEY = 'dev-only-secret-key-change-me-please-before-shipping-2026'
+        raise ImproperlyConfigured("SECRET_KEY must be set in production")
+    SECRET_KEY = "dev-only-secret-key-change-me-please-before-shipping-2026"
 
 _raw_allowed_hosts = os.getenv(
-    'ALLOWED_HOSTS',
-    'localhost,127.0.0.1,.up.railway.app,.railway.app,.vercel.app,bkostations-production.up.railway.app'
-).split(',')
+    "ALLOWED_HOSTS",
+    "localhost,127.0.0.1,.up.railway.app,.railway.app,.vercel.app,bkostations-production.up.railway.app",
+).split(",")
 
 # Normalize host patterns coming from env (e.g. '*.up.railway.app' -> '.up.railway.app')
 ALLOWED_HOSTS = []
@@ -48,7 +49,7 @@ for host in _raw_allowed_hosts:
     host = host.strip()
     if not host:
         continue
-    if host.startswith('*.'):
+    if host.startswith("*."):
         host = f".{host[2:]}"
     ALLOWED_HOSTS.append(host)
 
@@ -60,113 +61,118 @@ for host in _raw_allowed_hosts:
 # Application definition
 
 INSTALLED_APPS = [
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-    'rest_framework',
-    'corsheaders',
-    'stations',
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    "rest_framework",
+    "corsheaders",
+    "stations",
 ]
 
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
 # CORS settings
-CORS_ALLOW_ALL_ORIGINS = os.getenv('CORS_ALLOW_ALL_ORIGINS', 'False').lower() == 'true'
+CORS_ALLOW_ALL_ORIGINS = os.getenv("CORS_ALLOW_ALL_ORIGINS", "False").lower() == "true"
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
-    origin.strip() for origin in os.getenv(
-        'CORS_ALLOWED_ORIGINS',
-        'http://localhost:3000,http://localhost:5500,http://127.0.0.1:5500,http://localhost:8000,http://localhost:8080,http://127.0.0.1:8080,https://bko-station-frontend.vercel.app,https://bko-stations.vercel.app,https://*.vercel.app,https://bkostations-production.up.railway.app'
-    ).split(',') if origin.strip()
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ALLOWED_ORIGINS",
+        "http://localhost:3000,http://localhost:5500,http://127.0.0.1:5500,http://localhost:8000,http://localhost:8080,http://127.0.0.1:8080,https://bko-station-frontend.vercel.app,https://bko-stations.vercel.app,https://*.vercel.app,https://bkostations-production.up.railway.app",
+    ).split(",")
+    if origin.strip()
 ]
 CSRF_TRUSTED_ORIGINS = [
-    origin.strip() for origin in os.getenv(
-        'CSRF_TRUSTED_ORIGINS',
-        'http://localhost:3000,http://localhost:5500,http://127.0.0.1:5500,http://localhost:8000,http://localhost:8080,http://127.0.0.1:8080,https://*.up.railway.app,https://bko-station-frontend.vercel.app,https://bko-stations.vercel.app,https://*.vercel.app,https://bkostations-production.up.railway.app'
-    ).split(',') if origin.strip()
+    origin.strip()
+    for origin in os.getenv(
+        "CSRF_TRUSTED_ORIGINS",
+        "http://localhost:3000,http://localhost:5500,http://127.0.0.1:5500,http://localhost:8000,http://localhost:8080,http://127.0.0.1:8080,https://*.up.railway.app,https://bko-station-frontend.vercel.app,https://bko-stations.vercel.app,https://*.vercel.app,https://bkostations-production.up.railway.app",
+    ).split(",")
+    if origin.strip()
 ]
 CORS_ALLOW_METHODS = [
-    'DELETE',
-    'GET',
-    'OPTIONS',
-    'PATCH',
-    'POST',
-    'PUT',
+    "DELETE",
+    "GET",
+    "OPTIONS",
+    "PATCH",
+    "POST",
+    "PUT",
 ]
 CORS_ALLOW_HEADERS = [
-    'accept',
-    'accept-encoding',
-    'authorization',
-    'content-type',
-    'dnt',
-    'origin',
-    'user-agent',
-    'x-csrftoken',
-    'x-requested-with',
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
 ]
 
-ROOT_URLCONF = 'config.urls'
+ROOT_URLCONF = "config.urls"
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
             ],
         },
     },
 ]
 
-WSGI_APPLICATION = 'config.wsgi.application'
+WSGI_APPLICATION = "config.wsgi.application"
 
 
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-DATABASE_URL = os.getenv('DATABASE_URL')
+DATABASE_URL = os.getenv("DATABASE_URL")
 if DATABASE_URL:
     import dj_database_url
+
     DATABASES = {
-        'default': dj_database_url.parse(
+        "default": dj_database_url.parse(
             DATABASE_URL,
             conn_max_age=600,
             ssl_require=not DEBUG,
         )
     }
-elif os.getenv('DB_ENGINE'):
+elif os.getenv("DB_ENGINE"):
     DATABASES = {
-        'default': {
-            'ENGINE': os.getenv('DB_ENGINE', 'django.db.backends.postgresql'),
-            'NAME': os.getenv('DB_NAME', 'bko_station'),
-            'USER': os.getenv('DB_USER', 'postgres'),
-            'PASSWORD': os.getenv('DB_PASSWORD', ''),
-            'HOST': os.getenv('DB_HOST', 'localhost'),
-            'PORT': os.getenv('DB_PORT', '5432'),
+        "default": {
+            "ENGINE": os.getenv("DB_ENGINE", "django.db.backends.postgresql"),
+            "NAME": os.getenv("DB_NAME", "bko_station"),
+            "USER": os.getenv("DB_USER", "postgres"),
+            "PASSWORD": os.getenv("DB_PASSWORD", ""),
+            "HOST": os.getenv("DB_HOST", "localhost"),
+            "PORT": os.getenv("DB_PORT", "5432"),
         }
     }
 else:
     DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
         }
     }
 
@@ -176,16 +182,16 @@ else:
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
 
@@ -193,9 +199,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
-LANGUAGE_CODE = 'fr-fr'
+LANGUAGE_CODE = "fr-fr"
 
-TIME_ZONE = 'Africa/Bamako'
+TIME_ZONE = "Africa/Bamako"
 
 USE_I18N = True
 
@@ -205,123 +211,123 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
-STATIC_URL = 'static/'
-STATIC_ROOT = BASE_DIR / 'staticfiles'
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 # Media files
-MEDIA_URL = 'media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_URL = "media/"
+MEDIA_ROOT = BASE_DIR / "media"
 
 # REST Framework settings
 REST_FRAMEWORK = {
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny',
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.AllowAny",
     ],
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 50,
-    'DEFAULT_RENDERER_CLASSES': [
-        'rest_framework.renderers.JSONRenderer',
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 50,
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
     ],
-    'DEFAULT_PARSER_CLASSES': [
-        'rest_framework.parsers.JSONParser',
-        'rest_framework.parsers.FormParser',
-        'rest_framework.parsers.MultiPartParser',
+    "DEFAULT_PARSER_CLASSES": [
+        "rest_framework.parsers.JSONParser",
+        "rest_framework.parsers.FormParser",
+        "rest_framework.parsers.MultiPartParser",
     ],
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
-    'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
+    "EXCEPTION_HANDLER": "rest_framework.views.exception_handler",
 }
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
-    'ROTATE_REFRESH_TOKENS': True,
-    'BLACKLIST_AFTER_ROTATION': False,
-    'ALGORITHM': 'HS256',
-    'SIGNING_KEY': SECRET_KEY,
-    'AUTH_HEADER_TYPES': ('Bearer',),
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": False,
+    "ALGORITHM": "HS256",
+    "SIGNING_KEY": SECRET_KEY,
+    "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
 # Cache settings
-REDIS_URL = os.getenv('REDIS_URL')
-CACHE_BACKEND = os.getenv('CACHE_BACKEND')
-CACHE_LOCATION = os.getenv('CACHE_LOCATION')
+REDIS_URL = os.getenv("REDIS_URL")
+CACHE_BACKEND = os.getenv("CACHE_BACKEND")
+CACHE_LOCATION = os.getenv("CACHE_LOCATION")
 if REDIS_URL or (CACHE_BACKEND and CACHE_LOCATION):
     CACHES = {
-        'default': {
-            'BACKEND': CACHE_BACKEND or 'django.core.cache.backends.redis.RedisCache',
-            'LOCATION': CACHE_LOCATION or REDIS_URL,
-            'TIMEOUT': 300,
-            'OPTIONS': {
-                'IGNORE_EXCEPTIONS': True,
+        "default": {
+            "BACKEND": CACHE_BACKEND or "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": CACHE_LOCATION or REDIS_URL,
+            "TIMEOUT": 300,
+            "OPTIONS": {
+                "IGNORE_EXCEPTIONS": True,
             },
         }
     }
 else:
     CACHES = {
-        'default': {
-            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-            'LOCATION': 'bko-station-cache',
-            'TIMEOUT': 300,
-            'OPTIONS': {
-                'MAX_ENTRIES': 1000,
-                'CULL_FREQUENCY': 3,
-            }
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "bko-station-cache",
+            "TIMEOUT": 300,
+            "OPTIONS": {
+                "MAX_ENTRIES": 1000,
+                "CULL_FREQUENCY": 3,
+            },
         }
     }
 
 # Logging configuration
 LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'verbose': {
-            'format': '{levelname} {asctime} {module} {message}',
-            'style': '{',
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "{levelname} {asctime} {module} {message}",
+            "style": "{",
         },
-        'simple': {
-            'format': '{levelname} {message}',
-            'style': '{',
-        },
-    },
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-            'formatter': 'simple',
-        },
-        'file': {
-            'class': 'logging.FileHandler',
-            'filename': BASE_DIR / 'bko_station.log',
-            'formatter': 'verbose',
+        "simple": {
+            "format": "{levelname} {message}",
+            "style": "{",
         },
     },
-    'root': {
-        'handlers': ['console', 'file'],
-        'level': 'INFO',
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "simple",
+        },
+        "file": {
+            "class": "logging.FileHandler",
+            "filename": BASE_DIR / "bko_station.log",
+            "formatter": "verbose",
+        },
     },
-    'loggers': {
-        'django': {
-            'handlers': ['console', 'file'],
-            'level': 'INFO',
-            'propagate': False,
+    "root": {
+        "handlers": ["console", "file"],
+        "level": "INFO",
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console", "file"],
+            "level": "INFO",
+            "propagate": False,
         },
-        'stations': {
-            'handlers': ['console', 'file'],
-            'level': 'DEBUG',
-            'propagate': False,
+        "stations": {
+            "handlers": ["console", "file"],
+            "level": "DEBUG",
+            "propagate": False,
         },
-        'django.request': {
-            'handlers': ['file'],
-            'level': 'ERROR',
-            'propagate': False,
+        "django.request": {
+            "handlers": ["file"],
+            "level": "ERROR",
+            "propagate": False,
         },
     },
 }
 
 # Security flags - configurable for production vs development
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 if IS_PRODUCTION:
     SECURE_SSL_REDIRECT = True
@@ -330,6 +336,10 @@ if IS_PRODUCTION:
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
+    # Exempt healthcheck endpoint from SSL redirect.
+    # Railway probes /api/health/ via internal HTTP (not HTTPS) and would
+    # receive a 301 otherwise -> healthcheck would always time out.
+    SECURE_REDIRECT_EXEMPT = [r"^api/health/?$", r"^api/healthz/?$"]
 else:
     SECURE_SSL_REDIRECT = False
     SESSION_COOKIE_SECURE = False
@@ -339,25 +349,25 @@ else:
     SECURE_HSTS_PRELOAD = False
 
 # Default primary key field type
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Rate Limiting (application-level)
 RATE_LIMIT = {
-    'SIGNALEMENT_CREATE': 10,  # Max 10 signalements par heure par IP
-    'SEARCH': 60,  # Max 60 recherches par minute
-    'GENERAL': 100,  # Max 100 requêtes par minute
+    "SIGNALEMENT_CREATE": 10,  # Max 10 signalements par heure par IP
+    "SEARCH": 60,  # Max 60 recherches par minute
+    "GENERAL": 100,  # Max 100 requêtes par minute
 }
 
 # Feature flags
 FEATURES = {
-    'ENABLE_SIGNALEMENT_APPROVAL': True,
-    'ENABLE_COMMENTS': True,
-    'ENABLE_NEARBY_SEARCH': True,
-    'ENABLE_HEATMAP': True,
+    "ENABLE_SIGNALEMENT_APPROVAL": True,
+    "ENABLE_COMMENTS": True,
+    "ENABLE_NEARBY_SEARCH": True,
+    "ENABLE_HEATMAP": True,
 }
 
 # Custom authentication backend (phone or username)
 AUTHENTICATION_BACKENDS = [
-    'stations.auth_backends.PhoneOrUsernameAuthBackend',
-    'django.contrib.auth.backends.ModelBackend',
+    "stations.auth_backends.PhoneOrUsernameAuthBackend",
+    "django.contrib.auth.backends.ModelBackend",
 ]
