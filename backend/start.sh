@@ -47,4 +47,14 @@ else:
 
 echo ""
 echo "==> Lancement de Gunicorn..."
-exec gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --timeout 120 --workers 2 --threads 2
+# Railway injecte la variable PORT dynamiquement. Fallback sur 8080 si absente.
+PORT="${PORT:-8080}"
+echo "Port d'écoute: $PORT"
+exec gunicorn config.wsgi:application \
+    --bind "0.0.0.0:$PORT" \
+    --timeout 120 \
+    --workers 2 \
+    --threads 2 \
+    --access-logfile - \
+    --error-logfile - \
+    --log-level info
