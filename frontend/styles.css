@@ -105,6 +105,51 @@ a {
     border-bottom-color: rgba(110, 160, 255, 0.2);
 }
 
+.station-marker {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #6ea8ff;
+    border: 2px solid #ffffff;
+    box-shadow:
+        0 0 0 2px rgba(10, 14, 30, 0.85),
+        0 4px 10px rgba(0, 0, 0, 0.45);
+}
+
+.station-marker.available {
+    background: #2ecc71;
+}
+
+.station-marker.partial {
+    background: #f1c40f;
+}
+
+.station-marker.empty {
+    background: #e74c3c;
+}
+
+.station-marker.unknown {
+    background: #8aa0bf;
+}
+
+.station-marker.fresh {
+    box-shadow:
+        0 0 0 2px rgba(10, 14, 30, 0.85),
+        0 0 0 6px rgba(46, 204, 113, 0.25),
+        0 4px 10px rgba(0, 0, 0, 0.45);
+}
+
+.user-location-marker {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #6ea8ff;
+    border: 3px solid #ffffff;
+    box-shadow:
+        0 0 0 4px rgba(110, 168, 255, 0.35),
+        0 4px 10px rgba(0, 0, 0, 0.45);
+}
+
 .app-sidebar {
     position: fixed;
     top: 20px;
@@ -152,7 +197,7 @@ a {
     position: relative;
     z-index: 1;
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 6px;
     padding: 6px;
     border-radius: 18px;
@@ -438,6 +483,39 @@ button:disabled {
 .nav-btn.active {
     color: #eef4ff;
     background: rgba(77, 226, 197, 0.14);
+    box-shadow: inset 0 0 0 1px rgba(77, 226, 197, 0.18);
+}
+
+.sub-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+    padding: 4px;
+    margin-bottom: 14px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(110, 160, 255, 0.14);
+}
+
+.sub-tab {
+    padding: 9px 10px;
+    border-radius: 10px;
+    background: transparent;
+    color: rgba(222, 232, 255, 0.7);
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition:
+        background 160ms ease,
+        color 160ms ease;
+}
+
+.sub-tab:hover {
+    color: #eef4ff;
+}
+
+.sub-tab.active {
+    background: rgba(77, 226, 197, 0.14);
+    color: #eef4ff;
     box-shadow: inset 0 0 0 1px rgba(77, 226, 197, 0.18);
 }
 

@@ -24,6 +24,7 @@ const state = {
   selectedStation: null,
   userLocation: null,
   currentView: "list",
+  stationsSubView: "list",
   lastUpdate: null,
   authToken: null,
   currentUser: null,
@@ -172,13 +173,13 @@ async function initApp() {
     // Load nearby stations with current filters
     await refreshStations({ keepSelection: false, showToastOnError: true });
 
-    // Default to list view for quick decision making
-    switchView("list");
+    // Default to map view (landing on the map keeps the UI uncluttered)
+    switchView("map");
     elements.navButtons.forEach((b) => b.classList.remove("active"));
-    const listBtn = Array.from(elements.navButtons).find(
-      (b) => b.dataset.view === "list",
+    const mapBtn = Array.from(elements.navButtons).find(
+      (b) => b.dataset.view === "map",
     );
-    if (listBtn) listBtn.classList.add("active");
+    if (mapBtn) mapBtn.classList.add("active");
 
     // Start live pulse
     startLivePulse();
@@ -1187,7 +1188,12 @@ async function submitSignalement(fuelType, status, comment = "") {
   await reportAvailability(fuelType, status, comment);
 }
 
+// Sub-tabs grouped under the "Stations" tab
+const STATIONS_SUB_VIEWS = ["list", "alerts", "add-station"];
+
 function switchView(view) {
+  // Map legacy/internal sub-views to the parent "stations" group for nav highlight
+  const isStationsSub = STATIONS_SUB_VIEWS.includes(view);
   state.currentView = view;
 
   // Hide all view containers by removing active class
@@ -1196,7 +1202,7 @@ function switchView(view) {
     .forEach((el) => el.classList.remove("active"));
 
   // Cleanup add-station map when leaving that view
-  if (state.addStationMap) {
+  if (view !== "add-station" && state.addStationMap) {
     state.addStationMap.remove();
     state.addStationMap = null;
     state.addStationMarker = null;
@@ -1217,17 +1223,23 @@ function switchView(view) {
         }
       }, 50);
       break;
+    case "stations":
+      if (!sidebarMode) {
+        document.getElementById("map").style.display = "none";
+      }
+      showStationsView(state.stationsSubView || "list");
+      break;
     case "list":
       if (!sidebarMode) {
         document.getElementById("map").style.display = "none";
       }
-      showListView();
+      showStationsView("list");
       break;
     case "alerts":
       if (!sidebarMode) {
         document.getElementById("map").style.display = "none";
       }
-      showAlertsView();
+      showStationsView("alerts");
       break;
     case "electricity":
       if (!sidebarMode) {
@@ -1239,7 +1251,7 @@ function switchView(view) {
       if (!sidebarMode) {
         document.getElementById("map").style.display = "none";
       }
-      showAddStationView();
+      showStationsView("add-station");
       break;
     case "admin":
       if (!sidebarMode) {
@@ -1247,6 +1259,15 @@ function switchView(view) {
       }
       showAdminView();
       break;
+  }
+
+  // Highlight the parent "stations" nav button when on any sub-view
+  if (isStationsSub) {
+    elements.navButtons.forEach((b) => b.classList.remove("active"));
+    const parentBtn = Array.from(elements.navButtons).find(
+      (b) => b.dataset.view === "stations",
+    );
+    if (parentBtn) parentBtn.classList.add("active");
   }
 
   // On sidebar mode, ensure views are in the sidebar content area
@@ -1259,6 +1280,45 @@ function switchView(view) {
       }
     }, 100);
   }
+}
+
+function showStationsView(subView) {
+  const valid = ["list", "alerts", "add-station"];
+  const target = valid.includes(subView) ? subView : "list";
+  state.stationsSubView = target;
+
+  // Render sub-view content
+  if (target === "list") {
+    showListView();
+  } else if (target === "alerts") {
+    showAlertsView();
+  } else if (target === "add-station") {
+    showAddStationView();
+  }
+
+  // Inject sub-tab bar at the top of the active view-container
+  const activeView = document.querySelector(".view-container.active");
+  if (!activeView) return;
+
+  let subTabs = activeView.querySelector(".sub-tabs");
+  if (!subTabs) {
+    subTabs = document.createElement("div");
+    subTabs.className = "sub-tabs";
+    subTabs.innerHTML = `
+      <button type="button" class="sub-tab" data-sub="list">Liste</button>
+      <button type="button" class="sub-tab" data-sub="alerts">Alertes</button>
+      <button type="button" class="sub-tab" data-sub="add-station">Ajouter</button>
+    `;
+    activeView.insertBefore(subTabs, activeView.firstChild);
+    subTabs.querySelectorAll(".sub-tab").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        switchView(btn.dataset.sub);
+      });
+    });
+  }
+  subTabs.querySelectorAll(".sub-tab").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.sub === target);
+  });
 }
 
 function showListView() {
